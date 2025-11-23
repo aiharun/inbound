@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage } from './types';
+import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog } from './types';
 import { RampCard } from './components/RampCard';
 import { VehicleList } from './components/VehicleList';
 import { PlannedTripsList } from './components/PlannedTripsList';
@@ -17,10 +17,11 @@ import { PlannedTripsEditorModal } from './components/PlannedTripsEditorModal';
 import { EditQuantityModal } from './components/EditQuantityModal';
 import { AdminMessageModal } from './components/AdminMessageModal';
 import { ChatModal } from './components/ChatModal';
-import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare } from 'lucide-react';
+import { AdminLogsModal } from './components/AdminLogsModal';
+import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
-import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage } from './services/firebase';
+import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog } from './services/firebase';
 
 // Initial State Generator
 const createInitialRamps = (): Ramp[] => Array.from({ length: 5 }, (_, i) => ({
@@ -59,6 +60,7 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>(() => getStoredState('dockflow_users_list', INITIAL_USERS));
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>(() => getStoredState('dockflow_sessions', []));
   const [adminMessages, setAdminMessages] = useState<AdminMessage[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredState('dockflow_user', null));
@@ -83,6 +85,7 @@ const App: React.FC = () => {
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isPlannedTripsEditorOpen, setIsPlannedTripsEditorOpen] = useState(false);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
   const [isEndDayConfirmOpen, setIsEndDayConfirmOpen] = useState(false);
   
@@ -112,6 +115,28 @@ const App: React.FC = () => {
   const [targetPlate, setTargetPlate] = useState<string>('');
   const [targetProductCount, setTargetProductCount] = useState<number | null>(null);
 
+  // LOGGING HELPER
+  const handleLogAction = (actionType: SystemLog['actionType'], description: string) => {
+    if (!currentUser) return; // Only log if user is logged in (usually)
+
+    const newLog: SystemLog = {
+      id: Date.now().toString(),
+      actionType,
+      description,
+      performedBy: currentUser.username,
+      performedByName: currentUser.name,
+      timestamp: new Date().toISOString()
+    };
+
+    // 1. Add to local state (optional, as subscription will pick it up)
+    setSystemLogs(prev => [newLog, ...prev]);
+
+    // 2. Push to Firestore
+    if (isFirebaseConfigured()) {
+       addSystemLog(newLog);
+    }
+  };
+
   // REAL-TIME SYNC SETUP
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -132,6 +157,7 @@ const App: React.FC = () => {
             if (data.users) setUsers(data.users);
             if (data.activeSessions) setActiveSessions(data.activeSessions);
             if (data.messages) setAdminMessages(data.messages);
+            if (data.systemLogs) setSystemLogs(data.systemLogs);
             setIsSynced(true);
         } else {
             // Remote data is empty (new project), seed it with current local/initial state
@@ -223,7 +249,6 @@ const App: React.FC = () => {
     if (isFirebaseConfigured()) {
         updateData(updates);
     }
-    // If not configured, the React state update (done in handlers) + LocalStorage effect handles the local-only flow
   };
 
   // Calculate remaining trips for ALL plates
@@ -324,10 +349,26 @@ const App: React.FC = () => {
     
     setActiveSessions(newSessions);
     pushUpdate({ activeSessions: newSessions });
+    
+    // We can't use handleLogAction here immediately because currentUser state isn't set yet in this scope
+    // But we can manually add log using the user object passed in
+    if (isFirebaseConfigured()) {
+       addSystemLog({
+         id: Date.now().toString(),
+         actionType: 'LOGIN',
+         description: 'Kullanıcı sisteme giriş yaptı.',
+         performedBy: user.username,
+         performedByName: user.name,
+         timestamp: new Date().toISOString()
+       });
+    }
   };
 
   const handleLogout = () => {
     if (currentUser) {
+        // Log action before destroying session state
+        handleLogAction('LOGOUT', 'Kullanıcı sistemden çıkış yaptı.');
+
         // Remove from active sessions
         const newSessions = activeSessions.filter(s => s.username !== currentUser.username);
         setActiveSessions(newSessions);
@@ -340,12 +381,14 @@ const App: React.FC = () => {
     setIsModalOpen(false);
     setIsUserManagementOpen(false);
     setIsChatOpen(false);
+    setIsLogsModalOpen(false);
   };
 
   const handleAddUser = (newUser: User) => {
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
     pushUpdate({ users: updatedUsers });
+    handleLogAction('USER_MGMT', `Yeni kullanıcı oluşturuldu: ${newUser.username} (${newUser.role})`);
   };
 
   const handleDeleteUser = (username: string) => {
@@ -359,6 +402,7 @@ const App: React.FC = () => {
 
     // 3. Push both updates
     pushUpdate({ users: updatedUsers, activeSessions: updatedSessions });
+    handleLogAction('USER_MGMT', `Kullanıcı silindi: ${username}`);
   };
 
   // ADMIN MESSAGING HANDLERS
@@ -373,24 +417,10 @@ const App: React.FC = () => {
         sentBy: currentUser.name
     };
     
-    // In a real DB we would push to collection, here we update the messages array in main doc (or collection)
-    // Using simple array update logic for now
-    // But since we have subscribeToData listening to 'messages' collection, let's just add it there via custom logic or simple array?
-    // Let's use pushUpdate assuming updateData handles it? 
-    // Wait, updateData doesn't have logic for 'messages' collection inserts yet.
-    // For simplicity, let's treat it as a top level array for now in this demo or assume updateData handles it.
-    // Actually, services/firebase.ts updateData logic for 'messages' was skipped.
-    // Let's implement a workaround: use a dedicated field in main doc for now or implement collection add.
-    // To keep it simple and consistent with previous "Admin Message" request, we probably should have implemented collection add.
-    // But let's assume updateData handles { messages: ... } by overwriting (not ideal but works for small scale)
-    // Or better, let's just update the local state and push the array.
-    
-    // Note: In a production app, we should use addDoc to a subcollection.
-    // Here we will just append to the array and sync.
     const newMessages = [...adminMessages, newMessage];
     setAdminMessages(newMessages);
-    // Since we didn't implement robust message sync in updateData, let's use the main doc field 'messages'
     pushUpdate({ messages: newMessages });
+    handleLogAction('USER_MGMT', `${targetUsername} kullanıcısına yönetici mesajı gönderildi.`);
   };
 
   const handleDismissAdminMessage = (id: string) => {
@@ -414,9 +444,11 @@ const App: React.FC = () => {
   };
 
   const performEndDayReset = () => {
-    // Manually reset all state to initial values to avoid page reload issues
-    // RESET DRIVERS TO INITIAL FILE DATA (retrieve from drivers.ts)
+    handleLogAction('RESET', 'Günü bitir işlemi uygulandı. Sistem verileri sıfırlandı.');
+
+    // Reset drivers state using DRIVER_REGISTRY
     const newDrivers = DRIVER_REGISTRY;
+    // Reset available plates using keys from DRIVER_REGISTRY
     const newAvailablePlates = Object.keys(DRIVER_REGISTRY);
 
     const newVehicles = INITIAL_VEHICLES;
@@ -425,7 +457,6 @@ const App: React.FC = () => {
     const newCanceled = {};
     const newNotes = {};
 
-    // Set States
     setVehicles(newVehicles);
     setRamps(newRamps);
     setScheduledTrips(newScheduled);
@@ -434,7 +465,6 @@ const App: React.FC = () => {
     setAvailablePlates(newAvailablePlates);
     setDrivers(newDrivers);
 
-    // Sync Reset to Cloud
     if (isFirebaseConfigured()) {
         resetCloudData({
             vehicles: newVehicles,
@@ -443,15 +473,14 @@ const App: React.FC = () => {
             canceledTrips: newCanceled,
             vehicleNotes: newNotes,
             availablePlates: newAvailablePlates,
-            drivers: newDrivers, // Reset to file data
-            users, // Keep users
-            activeSessions // Keep sessions
+            drivers: newDrivers,
+            users, 
+            activeSessions 
         });
     }
   };
 
   const handleAddScheduledTrip = (plate: string, count: number) => {
-    // Determine baseline count.
     const currentBase = scheduledTrips[plate] !== undefined 
         ? scheduledTrips[plate] 
         : (allRemainingTrips[plate] || 0);
@@ -466,7 +495,7 @@ const App: React.FC = () => {
         delete newCanceled[plate];
         setCanceledTrips(newCanceled);
     } else {
-        newCanceled = canceledTrips; // No change
+        newCanceled = canceledTrips;
     }
 
     let newAvailable = availablePlates;
@@ -476,7 +505,6 @@ const App: React.FC = () => {
         newAvailable = [plate, ...availablePlates];
         setAvailablePlates(newAvailable);
         
-        // Also ensure it exists in drivers map for Cloud sync (Plates Collection)
         if (!newDrivers[plate]) {
             newDrivers = { ...drivers, [plate]: { name: '', phone: '' } };
             setDrivers(newDrivers);
@@ -489,6 +517,8 @@ const App: React.FC = () => {
         availablePlates: newAvailable, 
         drivers: newDrivers
     });
+
+    handleLogAction('UPDATE', `${plate} için ${count} adet yeni sefer planlandı.`);
   };
 
   const handleBatchUpdateScheduledTrips = (
@@ -496,7 +526,6 @@ const App: React.FC = () => {
       newDriverData?: Record<string, DriverInfo>,
       deletedPlates?: string[]
   ) => {
-    // 1. Handle Deletions first
     let finalAvailablePlates = [...availablePlates];
     let finalDrivers = { ...drivers };
     let finalScheduledTrips = { ...scheduledTrips };
@@ -512,10 +541,10 @@ const App: React.FC = () => {
             delete finalScheduledTrips[p];
             delete finalNotes[p];
         });
+        
+        handleLogAction('UPDATE', `Toplu düzenleme ile ${deletedPlates.length} araç silindi: ${deletedPlates.join(', ')}`);
     }
 
-    // 2. Merge Updates (Trips)
-    // Filter out updates for deleted plates just in case
     const validUpdates: Record<string, number> = {};
     Object.keys(updates).forEach(key => {
         if (!deletedPlates?.includes(key)) {
@@ -525,22 +554,18 @@ const App: React.FC = () => {
     
     finalScheduledTrips = { ...finalScheduledTrips, ...validUpdates };
     
-    // 3. Handle Restorations (Cancel -> Active)
     const platesToRestore = Object.keys(validUpdates).filter(plate => validUpdates[plate] > 0);
     const newCanceled = { ...canceledTrips };
     platesToRestore.forEach(plate => {
         if (newCanceled[plate]) delete newCanceled[plate];
     });
 
-    // 4. Add new plates
     const newPlates = Object.keys(validUpdates);
     newPlates.forEach(plate => {
         if (!finalAvailablePlates.includes(plate)) finalAvailablePlates.push(plate);
     });
 
-    // 5. Handle New Drivers
     if (newDriverData && Object.keys(newDriverData).length > 0) {
-        // Only add if not deleted
         const validNewDrivers: Record<string, DriverInfo> = {};
         Object.keys(newDriverData).forEach(key => {
             if (!deletedPlates?.includes(key)) {
@@ -548,16 +573,15 @@ const App: React.FC = () => {
             }
         });
         finalDrivers = { ...finalDrivers, ...validNewDrivers };
+        handleLogAction('UPDATE', `Toplu düzenleme ile ${Object.keys(validNewDrivers).length} yeni araç/sürücü eklendi.`);
     }
 
-    // Update State
     setScheduledTrips(finalScheduledTrips);
     setCanceledTrips(newCanceled);
     setAvailablePlates(finalAvailablePlates);
     setDrivers(finalDrivers);
     setVehicleNotes(finalNotes);
     
-    // Push Update
     pushUpdate({
         scheduledTrips: finalScheduledTrips,
         canceledTrips: newCanceled,
@@ -565,6 +589,8 @@ const App: React.FC = () => {
         drivers: finalDrivers,
         vehicleNotes: finalNotes
     });
+    
+    handleLogAction('UPDATE', 'Sefer listesi toplu olarak güncellendi.');
   };
 
   const handleAssignFromPlanned = (plate: string) => {
@@ -593,13 +619,8 @@ const App: React.FC = () => {
         const newCanceled = { ...canceledTrips, [plate]: currentCount };
         setCanceledTrips(newCanceled);
 
-        // Update vehicles logic:
-        // 1. Remove INCOMING vehicles (haven't arrived yet).
-        // 2. Remove WAITING vehicles (removed from list entirely).
-        // 3. Keep other vehicles as is.
         const newVehicles = vehicles.filter(v => {
             if (v.licensePlate === plate) {
-                // Remove incoming and waiting from the list
                 if (v.status === VehicleStatus.INCOMING || v.status === VehicleStatus.WAITING) {
                     return false;
                 }
@@ -613,6 +634,8 @@ const App: React.FC = () => {
             canceledTrips: newCanceled, 
             vehicles: newVehicles 
         });
+        
+        handleLogAction('CANCEL', `${plate} plakalı aracın seferi iptal edildi.`);
     }
   };
 
@@ -630,28 +653,20 @@ const App: React.FC = () => {
   const performCancelWaitingVehicle = (vehicleId: string) => {
     const vehicleToCancel = vehicles.find(v => v.id === vehicleId);
     
-    // Remove the vehicle from the list instead of marking it CANCELED
     const newVehicles = vehicles.filter(v => v.id !== vehicleId);
     setVehicles(newVehicles);
 
-    // If we cancel a waiting vehicle, we should increment the scheduled trip count back
-    // so it returns to the "Planned Trips" list.
     let newScheduled = scheduledTrips;
     if (vehicleToCancel) {
       const plate = vehicleToCancel.licensePlate;
-      // Calculate what the count should be. 
-      // If it exists in scheduledTrips, increment it.
-      // If not (meaning it was using the default logic or had 0 remaining), we need to ensure it becomes >0.
-      
       const currentScheduled = scheduledTrips[plate];
       if (currentScheduled !== undefined) {
          newScheduled = { ...scheduledTrips, [plate]: currentScheduled + 1 };
       } else {
-         // If it wasn't tracked explicitly, verify `allRemainingTrips` would have been 0.
-         // We add 1 to make it visible again.
          newScheduled = { ...scheduledTrips, [plate]: 1 };
       }
       setScheduledTrips(newScheduled);
+      handleLogAction('CANCEL', `${plate} plakalı araç sıradan çıkarıldı.`);
     }
     
     pushUpdate({ vehicles: newVehicles, scheduledTrips: newScheduled });
@@ -673,6 +688,7 @@ const App: React.FC = () => {
     if (!ramp || !ramp.currentVehicleId) return;
 
     const vehicleId = ramp.currentVehicleId;
+    const vehicle = vehicles.find(v => v.id === vehicleId);
 
     const newVehicles = vehicles.map(v => 
         v.id === vehicleId 
@@ -689,6 +705,9 @@ const App: React.FC = () => {
     setRamps(newRamps);
 
     pushUpdate({ vehicles: newVehicles, ramps: newRamps });
+    if(vehicle) {
+        handleLogAction('RAMP_CLEAR', `${vehicle.licensePlate} işlemi tamamlandı. Rampa: ${ramp.name}`);
+    }
   };
 
   const initiateRevertRamp = (rampId: string) => {
@@ -709,7 +728,6 @@ const App: React.FC = () => {
     const vehicleId = ramp.currentVehicleId;
     const vehicle = vehicles.find(v => v.id === vehicleId);
     
-    // 1. Reset Ramp to FREE
     const newRamps = ramps.map(r => 
         r.id === rampId 
             ? { ...r, status: 'FREE' as const, currentVehicleId: null } 
@@ -717,11 +735,9 @@ const App: React.FC = () => {
     );
     setRamps(newRamps);
 
-    // 2. Delete vehicle from list (as if it never started docking)
     const newVehicles = vehicles.filter(v => v.id !== vehicleId);
     setVehicles(newVehicles);
 
-    // 3. Increment Scheduled Trips (Back to queue)
     let newScheduled = scheduledTrips;
     if (vehicle) {
         const plate = vehicle.licensePlate;
@@ -733,6 +749,7 @@ const App: React.FC = () => {
              newScheduled = { ...scheduledTrips, [plate]: 1 };
         }
         setScheduledTrips(newScheduled);
+        handleLogAction('CANCEL', `${plate} rampa ataması geri alındı. Rampa: ${ramp.name}`);
     }
 
     pushUpdate({
@@ -772,6 +789,7 @@ const App: React.FC = () => {
             setScheduledTrips(newScheduled);
             pushUpdate({ scheduledTrips: newScheduled });
         }
+        handleLogAction('UPDATE', `${plate} için sefer sayısı 1 azaltıldı.`);
     }
   };
 
@@ -783,6 +801,7 @@ const App: React.FC = () => {
     pushUpdate({ 
         canceledTrips: newCanceled
     });
+    handleLogAction('UPDATE', `${plate} iptal edilen seferlerden geri yüklendi.`);
   };
 
   const handleCloseModal = () => {
@@ -807,7 +826,6 @@ const App: React.FC = () => {
       tripCount: currentTripCount
     };
     
-    // Filter out incoming entry if exists
     const newVehicles = [newVehicle, ...vehicles.filter(v => !(v.licensePlate === data.licensePlate && v.status === VehicleStatus.INCOMING))];
     setVehicles(newVehicles);
 
@@ -827,18 +845,18 @@ const App: React.FC = () => {
                 : ramp
         );
         setRamps(newRamps);
+        const rampName = ramps.find(r => r.id === data.rampId)?.name;
+        handleLogAction('RAMP_ASSIGN', `${data.licensePlate} doğrudan rampaya atandı. (${rampName})`);
     } else {
-        // If adding to queue (not directly to ramp), we also decrement the scheduled count
-        // because it is now "in process" (Waiting).
         const currentScheduled = scheduledTrips[data.licensePlate];
         if (currentScheduled !== undefined && currentScheduled > 0) {
              newScheduled = { ...scheduledTrips, [data.licensePlate]: currentScheduled - 1 };
              setScheduledTrips(newScheduled);
         } else if (currentScheduled === undefined && allRemainingTrips[data.licensePlate] > 0) {
-            // Implicit decrement for default 1 trip
-             newScheduled = { ...scheduledTrips, [data.licensePlate]: 0 }; // 1 - 1 = 0
+             newScheduled = { ...scheduledTrips, [data.licensePlate]: 0 }; 
              setScheduledTrips(newScheduled);
         }
+        handleLogAction('VEHICLE_ADD', `${data.licensePlate} kuyruğa giriş yaptı.`);
     }
 
     let newAvailable = availablePlates;
@@ -848,7 +866,6 @@ const App: React.FC = () => {
         newAvailable = [data.licensePlate, ...availablePlates];
         setAvailablePlates(newAvailable);
         
-        // Also ensure it exists in drivers map so it gets synced to the 'plates' collection
         if (!newDrivers[data.licensePlate]) {
             newDrivers = { ...drivers, [data.licensePlate]: { name: '', phone: '' } };
             setDrivers(newDrivers);
@@ -868,6 +885,7 @@ const App: React.FC = () => {
     const newNotes = { ...vehicleNotes, [plate]: note };
     setVehicleNotes(newNotes);
     pushUpdate({ vehicleNotes: newNotes });
+    handleLogAction('UPDATE', `${plate} aracına not eklendi.`);
   };
 
   const handleAddPlateToData = (newPlate: string) => {
@@ -875,11 +893,11 @@ const App: React.FC = () => {
         const newAvailable = [newPlate, ...availablePlates];
         setAvailablePlates(newAvailable);
         
-        // Add empty driver info to ensure it exists in the 'plates' collection
         const newDrivers = { ...drivers, [newPlate]: { name: '', phone: '' } };
         setDrivers(newDrivers);
 
         pushUpdate({ availablePlates: newAvailable, drivers: newDrivers });
+        handleLogAction('UPDATE', `${newPlate} sisteme yeni araç olarak kaydedildi.`);
     }
   };
 
@@ -892,10 +910,6 @@ const App: React.FC = () => {
 
     let newScheduled = scheduledTrips;
 
-    // NOTE: We do NOT decrement scheduledTrips here because it was already decremented
-    // when the vehicle was added to the QUEUE (in handleAddVehicle).
-    // Moving from Waiting -> Docking doesn't change the "Remaining Trips" count.
-
     const newRamps = ramps.map(ramp => 
         ramp.id === rampId 
             ? { ...ramp, status: 'OCCUPIED' as const, currentVehicleId: assigningVehicleId } 
@@ -903,6 +917,7 @@ const App: React.FC = () => {
     );
     setRamps(newRamps);
 
+    const vehicle = vehicles.find(v => v.id === assigningVehicleId);
     const newVehicles = vehicles.map(v => 
         v.id === assigningVehicleId 
             ? { ...v, status: VehicleStatus.DOCKING, rampId: rampId, dockingStartTime: new Date().toISOString() } 
@@ -917,12 +932,18 @@ const App: React.FC = () => {
         vehicles: newVehicles, 
         scheduledTrips: newScheduled 
     });
+
+    const rampName = ramps.find(r => r.id === rampId)?.name;
+    if (vehicle) {
+        handleLogAction('RAMP_ASSIGN', `${vehicle.licensePlate} rampaya atandı. (${rampName})`);
+    }
   };
 
   const handleUpdateDriver = (plate: string, name: string, phone: string) => {
     const newDrivers = { ...drivers, [plate]: { name, phone } };
     setDrivers(newDrivers);
     pushUpdate({ drivers: newDrivers });
+    handleLogAction('UPDATE', `${plate} sürücü bilgileri güncellendi.`);
   };
 
   // Quantity Edit Handlers
@@ -935,6 +956,7 @@ const App: React.FC = () => {
   const handleUpdateQuantity = (newCount: number) => {
     if (!editingQuantityVehicleId) return;
     
+    const vehicle = vehicles.find(v => v.id === editingQuantityVehicleId);
     const newVehicles = vehicles.map(v => 
         v.id === editingQuantityVehicleId 
             ? { ...v, productCount: newCount } 
@@ -945,6 +967,11 @@ const App: React.FC = () => {
     
     setIsEditQuantityModalOpen(false);
     setEditingQuantityVehicleId(null);
+
+    if (vehicle) {
+        const oldQuantity = vehicle.productCount;
+        handleLogAction('UPDATE', `${vehicle.licensePlate} adet bilgisi güncellendi. Eski: ${oldQuantity} -> Yeni: ${newCount}`);
+    }
   };
 
   return (
@@ -992,13 +1019,23 @@ const App: React.FC = () => {
                         </div>
                     </div>
                     {isAdmin && (
-                        <button
-                            onClick={() => setIsUserManagementOpen(true)}
-                            className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors text-sm font-medium border border-purple-100"
-                        >
-                            <Users size={18} />
-                            <span className="hidden sm:inline">Kullanıcılar</span>
-                        </button>
+                        <>
+                            <button
+                                onClick={() => setIsLogsModalOpen(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors text-sm font-medium border border-indigo-100"
+                                title="Sistem Kayıtları"
+                            >
+                                <FileClock size={18} />
+                                <span className="hidden sm:inline">Loglar</span>
+                            </button>
+                            <button
+                                onClick={() => setIsUserManagementOpen(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors text-sm font-medium border border-purple-100"
+                            >
+                                <Users size={18} />
+                                <span className="hidden sm:inline">Kullanıcılar</span>
+                            </button>
+                        </>
                     )}
                     <button 
                         onClick={() => setIsSettingsOpen(true)}
@@ -1241,16 +1278,23 @@ const App: React.FC = () => {
             />
 
             {isAdmin && currentUser && (
-                <UserManagementModal
-                    isOpen={isUserManagementOpen}
-                    onClose={() => setIsUserManagementOpen(false)}
-                    users={users}
-                    activeSessions={activeSessions}
-                    onAddUser={handleAddUser}
-                    onDeleteUser={handleDeleteUser}
-                    currentUser={currentUser}
-                    onSendMessage={handleSendAdminMessage}
-                />
+                <>
+                    <UserManagementModal
+                        isOpen={isUserManagementOpen}
+                        onClose={() => setIsUserManagementOpen(false)}
+                        users={users}
+                        activeSessions={activeSessions}
+                        onAddUser={handleAddUser}
+                        onDeleteUser={handleDeleteUser}
+                        currentUser={currentUser}
+                        onSendMessage={handleSendAdminMessage}
+                    />
+                    <AdminLogsModal
+                        isOpen={isLogsModalOpen}
+                        onClose={() => setIsLogsModalOpen(false)}
+                        logs={systemLogs}
+                    />
+                </>
             )}
             
             {/* Admin Message Display Modal for Users */}

@@ -15,19 +15,22 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
     availablePlates
 }) => {
   const [plate, setPlate] = useState('');
-  const [count, setCount] = useState<number>(1);
+  const [count, setCount] = useState<string>(''); // Changed to string to support empty state
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (plate && count > 0) {
-      onSubmit(plate.toUpperCase(), count);
+    const parsedCount = parseInt(count);
+    if (plate && !isNaN(parsedCount) && parsedCount > 0) {
+      onSubmit(plate.toUpperCase(), parsedCount);
       setPlate('');
-      setCount(1);
+      setCount('');
       onClose();
     }
   };
+
+  const isFormValid = plate && count && parseInt(count) > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -47,12 +50,12 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
               <select
                 value={plate}
                 onChange={(e) => setPlate(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none font-mono uppercase transition-all appearance-none cursor-pointer text-slate-700"
+                className={`w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none font-mono uppercase transition-all appearance-none cursor-pointer ${!plate ? 'text-slate-400' : 'text-slate-700'}`}
                 autoFocus
               >
                 <option value="" disabled>Plaka Seçiniz</option>
                 {availablePlates.map(p => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p} value={p} className="text-slate-700">{p}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
@@ -67,7 +70,8 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
                 type="number"
                 min="1"
                 value={count}
-                onChange={(e) => setCount(parseInt(e.target.value) || 1)}
+                onChange={(e) => setCount(e.target.value)}
+                placeholder="1"
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
               />
             </div>
@@ -84,7 +88,7 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!plate}
+              disabled={!isFormValid}
               className="flex-1 px-4 py-3 text-white font-bold bg-orange-600 hover:bg-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={18} />

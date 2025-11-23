@@ -65,3 +65,13 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
 }
+
+export interface SystemLog {
+  id: string;
+  actionType: 'LOGIN' | 'LOGOUT' | 'VEHICLE_ADD' | 'RAMP_ASSIGN' | 'RAMP_CLEAR' | 'CANCEL' | 'UPDATE' | 'RESET' | 'USER_MGMT';
+  description: string;
+  performedBy: string; // Username
+  performedByName: string; // Real Name
+  timestamp: string;
+  metadata?: string; // Optional JSON string for extra details
+}

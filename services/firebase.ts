@@ -6,11 +6,11 @@ import {
   doc, 
   onSnapshot, 
   setDoc,
-  collection, // Chat için gerekli
-  addDoc,     // Chat için gerekli
-  query,      // Chat için gerekli
-  orderBy,    // Chat için gerekli
-  limit       // Chat için gerekli
+  collection, // Chat ve Log için gerekli
+  addDoc,     // Chat ve Log eklemek için gerekli
+  query,      // Sıralama için gerekli
+  orderBy,    // Sıralama için gerekli
+  limit       // Son 100 mesajı çekmek için gerekli
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -30,39 +30,44 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ANA VERİ REFERANSI (Araçlar, Rampalar vb.)
+// ANA VERİ REFERANSI (Araçlar, Rampalar, Sürücüler, Kullanıcılar burada duracak)
 const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
 // --- SİHİRLİ TEMİZLEYİCİ ---
+// undefined değerleri temizler, sistemi çökmesini engeller
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   return JSON.parse(JSON.stringify(data));
 };
 
 // ==========================================
-// 1. ANA VERİ FONKSİYONLARI (Araçlar, Rampalar)
+// 1. ANA VERİ FONKSİYONLARI (Tek Döküman - Kararlı Yapı)
 // ==========================================
 
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   console.log("🔥 Firebase Canlı Bağlantı Başlatıldı...");
   
-  const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
+  // Ana veriyi dinle
+  const unsubscribeMain = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
       const data = docSnapshot.data();
       console.log("🔥 VERİ GELDİ (Saat: " + new Date().toLocaleTimeString() + ")");
       onDataUpdate(data);
     } else {
+      console.log("Veri yok, başlangıç bekleniyor.");
       onDataUpdate(null);
     }
   }, (error) => {
     console.error("Firebase Bağlantı Hatası:", error);
   });
-
-  return unsubscribe;
+  
+  // Sadece ana dinleyiciyi kapatmak yeterli, React hook'ları diğerlerini yönetir
+  return unsubscribeMain;
 };
 
 export const updateData = async (updates: any) => {
   try {
+    // Önce temizle, sonra gönder
     const cleanUpdates = cleanData(updates);
     await setDoc(DATA_DOC_REF, cleanUpdates, { merge: true });
   } catch (error) {
@@ -81,12 +86,13 @@ export const resetCloudData = async (fullData: any) => {
 };
 
 // ==========================================
-// 2. CHAT FONKSİYONLARI (Eksik olanlar burasıydı)
+// 2. CHAT FONKSİYONLARI (App.tsx'in istediği kısımlar)
 // ==========================================
 
 export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
-  // Sohbet mesajlarını "chat_messages" koleksiyonundan çekiyoruz
-  // Eskiden kalma veriyi korumak için ayrı koleksiyon mantıklı
+  if (!db) return () => {};
+
+  // Mesajları tarihe göre sıralayıp son 100 tanesini getir
   const q = query(
     collection(db, "chat_messages"), 
     orderBy("timestamp", "asc"), 
@@ -107,14 +113,28 @@ export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
 };
 
 export const sendChatMessage = async (message: any) => {
+  if (!db) return;
   try {
     const cleanMessage = cleanData(message);
-    // Mesajları ayrı bir koleksiyona ekliyoruz
     await addDoc(collection(db, "chat_messages"), cleanMessage);
   } catch (error) {
     console.error("Mesaj gönderme hatası:", error);
   }
 };
+
+// ==========================================
+// 3. LOG FONKSİYONLARI (App.tsx'in istediği kısımlar)
+// ==========================================
+
+export const addSystemLog = async (log: any) => {
+   if (!db) return;
+   try {
+       const cleanLog = cleanData(log);
+       await addDoc(collection(db, "system_logs"), cleanLog);
+   } catch (error) {
+       console.error("Log ekleme hatası:", error);
+   }
+}
 
 // Yardımcı kontrol
 export const isFirebaseConfigured = () => {
