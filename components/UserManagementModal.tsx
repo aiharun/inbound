@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Trash2, Shield, User, Clock, Monitor } from 'lucide-react';
+import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft } from 'lucide-react';
 import { User as UserType, ActiveSession } from '../types';
 
 interface UserManagementModalProps {
@@ -10,6 +10,7 @@ interface UserManagementModalProps {
   onAddUser: (user: UserType) => void;
   onDeleteUser: (username: string) => void;
   currentUser: UserType;
+  onSendMessage: (targetUsername: string, messageContent: string) => void;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -19,13 +20,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   activeSessions,
   onAddUser,
   onDeleteUser,
-  currentUser
+  currentUser,
+  onSendMessage
 }) => {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
   const [error, setError] = useState('');
+
+  // Messaging State
+  const [messagingUser, setMessagingUser] = useState<UserType | null>(null);
+  const [messageBody, setMessageBody] = useState('');
 
   if (!isOpen) return null;
 
@@ -56,6 +62,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setNewRole('user');
   };
 
+  const handleSendMessageSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (messagingUser && messageBody.trim()) {
+      onSendMessage(messagingUser.username, messageBody);
+      setMessagingUser(null);
+      setMessageBody('');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl p-6 m-4 animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
@@ -70,55 +85,97 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 overflow-y-auto custom-scrollbar pr-2">
-          {/* LEFT COLUMN: User List & Add User */}
+          {/* LEFT COLUMN: User List & Add User / Message User */}
           <div className="space-y-6">
             
-            {/* Add User Form */}
+            {/* Toggle between Add User and Send Message Form */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-              <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <UserPlus size={18} className="text-orange-600" />
-                Yeni Kullanıcı Ekle
-              </h3>
-              <form onSubmit={handleAddSubmit} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Ad Soyad"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                />
-                <input
-                  type="text"
-                  placeholder="Kullanıcı Adı"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                />
-                <input
-                  type="password"
-                  placeholder="Şifre"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                />
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'user')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                >
-                  <option value="user">Standart Kullanıcı</option>
-                  <option value="admin">Yönetici (Admin)</option>
-                </select>
-                
-                {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+              {messagingUser ? (
+                 <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <MessageSquare size={18} className="text-blue-600" />
+                            Mesaj Gönder
+                        </h3>
+                        <button 
+                            onClick={() => {
+                                setMessagingUser(null);
+                                setMessageBody('');
+                            }}
+                            className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                        >
+                            <ArrowLeft size={12} /> Geri
+                        </button>
+                    </div>
+                    <div className="mb-3 p-2 bg-white rounded border border-slate-200 text-sm">
+                        <span className="text-slate-400">Alıcı:</span> <span className="font-bold text-slate-700 ml-1">{messagingUser.name}</span>
+                    </div>
+                    <form onSubmit={handleSendMessageSubmit} className="space-y-3">
+                        <textarea
+                            placeholder="Mesajınızı yazın..."
+                            value={messageBody}
+                            onChange={(e) => setMessageBody(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-24"
+                            autoFocus
+                        />
+                        <button
+                            type="submit"
+                            disabled={!messageBody.trim()}
+                            className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Send size={16} />
+                            Gönder
+                        </button>
+                    </form>
+                 </div>
+              ) : (
+                <>
+                  <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <UserPlus size={18} className="text-orange-600" />
+                    Yeni Kullanıcı Ekle
+                  </h3>
+                  <form onSubmit={handleAddSubmit} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Ad Soyad"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Kullanıcı Adı"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                    <input
+                      type="password"
+                      placeholder="Şifre"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as 'admin' | 'user')}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                    >
+                      <option value="user">Standart Kullanıcı</option>
+                      <option value="admin">Yönetici (Admin)</option>
+                    </select>
+                    
+                    {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
 
-                <button
-                  type="submit"
-                  className="w-full py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors shadow-sm"
-                >
-                  Kullanıcı Oluştur
-                </button>
-              </form>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors shadow-sm"
+                    >
+                      Kullanıcı Oluştur
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
 
             {/* Registered Users List */}
@@ -140,13 +197,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       </div>
                     </div>
                     {user.username !== currentUser.username && (
-                      <button
-                        onClick={() => onDeleteUser(user.username)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Kullanıcıyı Sil"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex gap-1">
+                          <button
+                            onClick={() => setMessagingUser(user)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Mesaj Gönder"
+                          >
+                            <MessageSquare size={16} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteUser(user.username)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Kullanıcıyı Sil"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      </div>
                     )}
                   </div>
                 ))}

@@ -17,6 +17,7 @@ export interface Vehicle {
   productCount: number;
   status: VehicleStatus;
   tripCount: number;
+  isUnplanned?: boolean;
 }
 
 export interface Ramp {
@@ -47,4 +48,20 @@ export interface ActiveSession {
   loginTime: string;
   sessionId: string; // Unique identifier for the login instance
   deviceAgent?: string;
+}
+
+export interface AdminMessage {
+  id: string;
+  targetUsername: string; // The user meant to receive this
+  message: string;
+  sentAt: string;
+  sentBy: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderUsername: string;
+  senderName: string;
+  content: string;
+  timestamp: string;
 }

@@ -34,16 +34,19 @@ const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   // JSON.stringify undefined alanları otomatik siler.
+  // Bu işlem sayesinde "Unsupported field value: undefined" hatası almazsın.
   return JSON.parse(JSON.stringify(data));
 };
 
 // 1. DİNLEME FONKSİYONU
+// Tüm veriyi (Mesajlar, Plakalar, Kullanıcılar) tek seferde dinler.
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   console.log("🔥 Firebase Canlı Bağlantı (Tek Döküman) Başlatılıyor...");
   
   const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
       const data = docSnapshot.data();
+      // Saat bilgisi ekleyerek console'dan takibi kolaylaştırıyoruz
       console.log("🔥 VERİ GELDİ (Saat: " + new Date().toLocaleTimeString() + ")");
       onDataUpdate(data);
     } else {
@@ -60,6 +63,10 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
 // 2. GÜNCELLEME FONKSİYONU
 export const updateData = async (updates: any) => {
   try {
+    // Mesaj ekleme/silme işlemleri React tarafında yapılıp
+    // buraya "güncel mesaj listesi" olarak gelir.
+    // Biz sadece temizleyip kaydederiz.
+    
     // ÖNCE TEMİZLE (Hata almamak için)
     const cleanUpdates = cleanData(updates);
     
