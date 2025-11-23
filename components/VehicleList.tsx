@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Vehicle, VehicleStatus } from '../types';
-import { CheckCircle2, Clock, Truck, ArrowRight, CalendarDays, Hash, MapPin, Search, ChevronLeft, ChevronRight, Filter, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Truck, ArrowRight, CalendarDays, Hash, MapPin, Search, ChevronLeft, ChevronRight, Filter, Trash2, XCircle, Edit2 } from 'lucide-react';
 
 interface VehicleListProps {
   vehicles: Vehicle[];
   onAssignRamp: (vehicleId: string) => void;
   onCancelWaiting?: (vehicleId: string) => void;
+  onEditQuantity?: (vehicleId: string, currentCount: number) => void;
   readOnly?: boolean;
 }
 
-export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp, onCancelWaiting, readOnly = false }) => {
+export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp, onCancelWaiting, onEditQuantity, readOnly = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | VehicleStatus>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -145,7 +146,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
               <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Durum</th>
               <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Giriş</th>
               <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Konum</th>
-              <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Yük</th>
+              <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Yük (Adet)</th>
               <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider">Çıkış</th>
               <th className="px-6 py-4 font-bold text-slate-500 text-xs uppercase tracking-wider text-right">{!readOnly && "İşlem"}</th>
             </tr>
@@ -206,11 +207,22 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5">
-                        <Hash size={14} className="text-slate-400" />
-                        <span className="font-medium text-slate-700 font-mono">
-                            {vehicle.productCount.toLocaleString()}
-                        </span>
+                    <div className="flex items-center gap-2 group/edit">
+                        <div className="flex items-center gap-1.5">
+                            <Hash size={14} className="text-slate-400" />
+                            <span className="font-medium text-slate-700 font-mono">
+                                {vehicle.productCount.toLocaleString()}
+                            </span>
+                        </div>
+                        {!readOnly && onEditQuantity && !isCompleted && !isCanceled && (
+                            <button
+                                onClick={() => onEditQuantity(vehicle.id, vehicle.productCount)}
+                                className="ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-slate-100 hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm"
+                                title="Adet Düzenle"
+                            >
+                                <Edit2 size={14} />
+                            </button>
+                        )}
                     </div>
                   </td>
                   <td className="px-6 py-4">

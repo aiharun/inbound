@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Truck, FileText, Save, ChevronDown } from 'lucide-react';
 
 interface AddNoteModalProps {
@@ -6,25 +6,42 @@ interface AddNoteModalProps {
   onClose: () => void;
   onSave: (plate: string, note: string) => void;
   availablePlates: string[];
+  vehicleNotes?: Record<string, string>;
 }
 
 export const AddNoteModal: React.FC<AddNoteModalProps> = ({ 
     isOpen, 
     onClose, 
     onSave,
-    availablePlates
+    availablePlates,
+    vehicleNotes = {}
 }) => {
   const [plate, setPlate] = useState('');
   const [note, setNote] = useState('');
+
+  // Pre-fill note if the selected plate already has one
+  useEffect(() => {
+    if (plate && vehicleNotes[plate]) {
+        setNote(vehicleNotes[plate]);
+    } else if (plate) {
+        setNote('');
+    }
+  }, [plate, vehicleNotes]);
+
+  // Reset when closing
+  useEffect(() => {
+    if (!isOpen) {
+        setPlate('');
+        setNote('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (plate && note) {
+    if (plate && note.trim()) {
       onSave(plate.toUpperCase().trim(), note);
-      setPlate('');
-      setNote('');
       onClose();
     }
   };
@@ -85,7 +102,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!plate || !note}
+              disabled={!plate || !note.trim()}
               className="flex-1 px-4 py-3 text-white font-bold bg-orange-600 hover:bg-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={18} />

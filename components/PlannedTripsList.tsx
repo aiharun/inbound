@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, Pencil, Edit } from 'lucide-react';
+import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, Pencil, Edit, Package } from 'lucide-react';
 import { DriverInfo } from '../data/drivers';
 import { Vehicle, VehicleStatus } from '../types';
 
@@ -15,6 +15,7 @@ interface PlannedTripsListProps {
   readOnly?: boolean;
   vehicles: Vehicle[];
   onOpenEditor?: () => void;
+  onEditQuantity?: (vehicleId: string, currentCount: number) => void;
 }
 
 export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({ 
@@ -28,7 +29,8 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   vehicleNotes = {},
   readOnly = false, 
   vehicles,
-  onOpenEditor
+  onOpenEditor,
+  onEditQuantity
 }) => {
   const trips = (Object.entries(scheduledTrips) as [string, number][])
     .sort((a, b) => b[1] - a[1]);
@@ -75,6 +77,11 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
     let status: 'DOCKING' | 'COMPLETED' | 'UNKNOWN' = 'UNKNOWN';
     let tripHistoryCount = 0;
     
+    // Find the latest vehicle entry to get details like product count
+    const latestVehicle = vehicles
+        .filter(v => v.licensePlate === plate)
+        .sort((a, b) => new Date(b.arrivalTime).getTime() - new Date(a.arrivalTime).getTime())[0];
+
     // Check if vehicle is currently waiting in queue
     const isWaitingInQueue = vehicles.some(v => 
         v.licensePlate === plate && 
@@ -176,6 +183,30 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                     </div>
                 )}
             </div>
+            
+            {/* Quantity Display for Processed Items */}
+            {type === 'PROCESSED' && latestVehicle && (
+                <div className={`flex items-center gap-2 mb-3 p-2 rounded-lg border group/qty ${isDocking ? 'bg-orange-100/50 border-orange-200 text-orange-800' : 'bg-slate-100/50 border-slate-200 text-slate-600'}`}>
+                    <Package size={14} className={isDocking ? 'text-orange-500' : 'text-slate-400'} />
+                    <span className="text-xs font-medium">Adet:</span>
+                    <span className="text-sm font-bold font-mono ml-auto">
+                        {latestVehicle.productCount.toLocaleString()}
+                    </span>
+                    {!readOnly && onEditQuantity && (
+                        <button
+                             onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onEditQuantity(latestVehicle.id, latestVehicle.productCount);
+                             }}
+                             className="ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm"
+                             title="Adet Düzenle"
+                        >
+                            <Edit size={14} />
+                        </button>
+                    )}
+                </div>
+            )}
             
             {/* Driver Info Section */}
             <div className={`border-t pt-3 mb-2 space-y-2 ${isDocking ? 'border-orange-200' : isCanceled ? 'border-red-100' : 'border-slate-100'}`}>

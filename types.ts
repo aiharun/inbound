@@ -45,5 +45,6 @@ export interface ActiveSession {
   username: string;
   name: string;
   loginTime: string;
+  sessionId: string; // Unique identifier for the login instance
   deviceAgent?: string;
 }

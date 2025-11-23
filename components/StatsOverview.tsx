@@ -32,7 +32,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats, isLoggedIn 
         requiresLogin: true
     },
     { 
-        label: 'Toplam Yük', 
+        label: 'Toplam Adet', 
         value: stats.totalProducts.toLocaleString(), 
         sub: 'Birim İşlenen', 
         icon: Boxes, 

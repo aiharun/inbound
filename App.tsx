@@ -14,6 +14,7 @@ import { StatsOverview } from './components/StatsOverview';
 import { AddNoteModal } from './components/AddNoteModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { PlannedTripsEditorModal } from './components/PlannedTripsEditorModal';
+import { EditQuantityModal } from './components/EditQuantityModal';
 import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
@@ -58,6 +59,8 @@ const App: React.FC = () => {
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredState('dockflow_user', null));
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => getStoredState('dockflow_session_id', null));
+  
   const isLoggedIn = !!currentUser;
   const isAdmin = currentUser?.role === 'admin';
   
@@ -75,6 +78,11 @@ const App: React.FC = () => {
   const [isPlannedTripsEditorOpen, setIsPlannedTripsEditorOpen] = useState(false);
   const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
   const [isEndDayConfirmOpen, setIsEndDayConfirmOpen] = useState(false);
+  
+  // Quantity Edit State
+  const [isEditQuantityModalOpen, setIsEditQuantityModalOpen] = useState(false);
+  const [editingQuantityVehicleId, setEditingQuantityVehicleId] = useState<string | null>(null);
+  const [currentQuantityToEdit, setCurrentQuantityToEdit] = useState<number>(0);
   
   // Confirmation State for Actions
   const [confirmState, setConfirmState] = useState<{
@@ -154,6 +162,31 @@ const App: React.FC = () => {
       window.localStorage.removeItem('dockflow_user');
     }
   }, [currentUser]);
+  useEffect(() => {
+    if (currentSessionId) {
+      window.localStorage.setItem('dockflow_session_id', JSON.stringify(currentSessionId));
+    } else {
+      window.localStorage.removeItem('dockflow_session_id');
+    }
+  }, [currentSessionId]);
+
+  // SINGLE SESSION ENFORCEMENT
+  useEffect(() => {
+    if (currentUser && currentSessionId && activeSessions.length > 0) {
+        // Find the active session for the current user in the cloud data
+        const remoteSession = activeSessions.find(s => s.username === currentUser.username);
+        
+        // If a session exists in the cloud for this user
+        if (remoteSession) {
+            // Check if the cloud Session ID matches our local Session ID
+            if (remoteSession.sessionId !== currentSessionId) {
+                // IDs don't match, meaning a newer login occurred elsewhere.
+                alert("Hesabınıza başka bir cihazdan giriş yapıldığı için oturumunuz sonlandırıldı.");
+                handleLogout();
+            }
+        }
+    }
+  }, [activeSessions, currentUser, currentSessionId]);
 
   // Helper to push updates to cloud
   const pushUpdate = (updates: any) => {
@@ -242,17 +275,23 @@ const App: React.FC = () => {
 
   // Handlers
   const handleLogin = (user: User) => {
+    const newSessionId = Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    
     setCurrentUser(user);
-    // Add to active sessions
+    setCurrentSessionId(newSessionId);
+
+    // Create new session object
     const newSession: ActiveSession = {
         username: user.username,
         name: user.name,
-        loginTime: new Date().toISOString()
+        loginTime: new Date().toISOString(),
+        sessionId: newSessionId
     };
     
-    // Filter out previous session if exists to update timestamp
+    // Remove ANY previous session for this username (enforce single session)
     const otherSessions = activeSessions.filter(s => s.username !== user.username);
     const newSessions = [...otherSessions, newSession];
+    
     setActiveSessions(newSessions);
     pushUpdate({ activeSessions: newSessions });
   };
@@ -266,6 +305,7 @@ const App: React.FC = () => {
     }
     
     setCurrentUser(null);
+    setCurrentSessionId(null);
     setIsSettingsOpen(false);
     setIsModalOpen(false);
     setIsUserManagementOpen(false);
@@ -356,7 +396,7 @@ const App: React.FC = () => {
     pushUpdate({ 
         scheduledTrips: newScheduled, 
         canceledTrips: newCanceled, 
-        availablePlates: newAvailable,
+        availablePlates: newAvailable, 
         drivers: newDrivers
     });
   };
@@ -795,6 +835,28 @@ const App: React.FC = () => {
     pushUpdate({ drivers: newDrivers });
   };
 
+  // Quantity Edit Handlers
+  const openEditQuantity = (vehicleId: string, currentCount: number) => {
+    setEditingQuantityVehicleId(vehicleId);
+    setCurrentQuantityToEdit(currentCount);
+    setIsEditQuantityModalOpen(true);
+  };
+
+  const handleUpdateQuantity = (newCount: number) => {
+    if (!editingQuantityVehicleId) return;
+    
+    const newVehicles = vehicles.map(v => 
+        v.id === editingQuantityVehicleId 
+            ? { ...v, productCount: newCount } 
+            : v
+    );
+    setVehicles(newVehicles);
+    pushUpdate({ vehicles: newVehicles });
+    
+    setIsEditQuantityModalOpen(false);
+    setEditingQuantityVehicleId(null);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* Navbar */}
@@ -972,6 +1034,7 @@ const App: React.FC = () => {
                 vehicles={logVehicles} 
                 onAssignRamp={handleOpenAssignModal}
                 onCancelWaiting={initiateCancelWaitingVehicle}
+                onEditQuantity={isLoggedIn ? openEditQuantity : undefined}
                 readOnly={!isLoggedIn}
             />
 
@@ -988,6 +1051,7 @@ const App: React.FC = () => {
                 readOnly={!isLoggedIn}
                 vehicles={vehicles}
                 onOpenEditor={() => setIsPlannedTripsEditorOpen(true)}
+                onEditQuantity={isLoggedIn ? openEditQuantity : undefined}
             />
         </div>
       </main>
@@ -1025,6 +1089,7 @@ const App: React.FC = () => {
                 onClose={() => setIsNoteModalOpen(false)}
                 onSave={handleAddNote}
                 availablePlates={availablePlates}
+                vehicleNotes={vehicleNotes}
             />
 
             <PlannedTripsEditorModal
@@ -1034,6 +1099,13 @@ const App: React.FC = () => {
                 availablePlates={availablePlates}
                 scheduledTrips={scheduledTrips}
                 onSave={handleBatchUpdateScheduledTrips}
+            />
+
+            <EditQuantityModal
+                isOpen={isEditQuantityModalOpen}
+                onClose={() => setIsEditQuantityModalOpen(false)}
+                onSave={handleUpdateQuantity}
+                currentQuantity={currentQuantityToEdit}
             />
 
             <AssignRampModal
