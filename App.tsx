@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog } from './types';
 import { RampCard } from './components/RampCard';
@@ -18,6 +19,7 @@ import { EditQuantityModal } from './components/EditQuantityModal';
 import { AdminMessageModal } from './components/AdminMessageModal';
 import { ChatModal } from './components/ChatModal';
 import { AdminLogsModal } from './components/AdminLogsModal';
+import { CompleteRampModal } from './components/CompleteRampModal';
 import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
@@ -91,9 +93,17 @@ const App: React.FC = () => {
   
   // Quantity Edit State
   const [isEditQuantityModalOpen, setIsEditQuantityModalOpen] = useState(false);
-  const [editingQuantityVehicleId, setEditingQuantityVehicleId] = useState<string | null>(null);
-  const [currentQuantityToEdit, setCurrentQuantityToEdit] = useState<number>(0);
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [hideSackFieldsInEdit, setHideSackFieldsInEdit] = useState(false);
+  const [editingValues, setEditingValues] = useState({
+      count: 0,
+      incomingSacks: 0,
+      outgoingSacks: 0
+  });
   
+  // Ramp Completion State
+  const [completingRampId, setCompletingRampId] = useState<string | null>(null);
+
   // Confirmation State for Actions
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -301,6 +311,10 @@ const App: React.FC = () => {
     const completed = vehicles.filter(v => v.status === VehicleStatus.COMPLETED);
     const totalProducts = vehicles.reduce((acc, v) => acc + v.productCount, 0);
     
+    // Calculate total incoming and outgoing sacks
+    const totalIncomingSacks = vehicles.reduce((acc, v) => acc + (v.incomingSackCount || 0), 0);
+    const totalOutgoingSacks = vehicles.reduce((acc, v) => acc + (v.outgoingSackCount || 0), 0);
+    
     let totalDuration = 0;
     let completedCountWithDuration = 0;
     completed.forEach(v => {
@@ -324,7 +338,9 @@ const App: React.FC = () => {
         avgTurnaroundMinutes: avgTurnaround,
         totalProducts,
         canceledCount,
-        waitingCount: waitingCount
+        waitingCount: waitingCount,
+        totalIncomingSacks,
+        totalOutgoingSacks
     };
   }, [vehicles, ramps, allRemainingTrips, canceledTrips]);
 
@@ -350,8 +366,6 @@ const App: React.FC = () => {
     setActiveSessions(newSessions);
     pushUpdate({ activeSessions: newSessions });
     
-    // We can't use handleLogAction here immediately because currentUser state isn't set yet in this scope
-    // But we can manually add log using the user object passed in
     if (isFirebaseConfigured()) {
        addSystemLog({
          id: Date.now().toString(),
@@ -392,15 +406,10 @@ const App: React.FC = () => {
   };
 
   const handleDeleteUser = (username: string) => {
-    // 1. Remove from Users list
     const updatedUsers = users.filter(u => u.username !== username);
     setUsers(updatedUsers);
-
-    // 2. Remove from Active Sessions (Kick user out immediately)
     const updatedSessions = activeSessions.filter(s => s.username !== username);
     setActiveSessions(updatedSessions);
-
-    // 3. Push both updates
     pushUpdate({ users: updatedUsers, activeSessions: updatedSessions });
     handleLogAction('USER_MGMT', `Kullanıcı silindi: ${username}`);
   };
@@ -673,17 +682,16 @@ const App: React.FC = () => {
   };
 
   const initiateClearRamp = (rampId: string) => {
-    setConfirmState({
-      isOpen: true,
-      action: 'CLEAR_RAMP',
-      targetId: rampId,
-      title: 'Rampayı Boşalt',
-      message: 'Araç çıkış işlemini tamamlayıp rampayı boşaltmak istediğinize emin misiniz?',
-      isDanger: false
-    });
+    setCompletingRampId(rampId);
   };
 
-  const performClearRamp = (rampId: string) => {
+  const handleCompleteRamp = (incomingSacks: number, outgoingSacks: number) => {
+    if (!completingRampId) return;
+    performClearRamp(completingRampId, incomingSacks, outgoingSacks);
+    setCompletingRampId(null);
+  };
+
+  const performClearRamp = (rampId: string, incomingSacks: number, outgoingSacks: number) => {
     const ramp = ramps.find(r => r.id === rampId);
     if (!ramp || !ramp.currentVehicleId) return;
 
@@ -692,7 +700,13 @@ const App: React.FC = () => {
 
     const newVehicles = vehicles.map(v => 
         v.id === vehicleId 
-            ? { ...v, status: VehicleStatus.COMPLETED, exitTime: new Date().toISOString() } 
+            ? { 
+                ...v, 
+                status: VehicleStatus.COMPLETED, 
+                exitTime: new Date().toISOString(),
+                incomingSackCount: incomingSacks,
+                outgoingSackCount: outgoingSacks
+              } 
             : v
     );
     setVehicles(newVehicles);
@@ -706,7 +720,7 @@ const App: React.FC = () => {
 
     pushUpdate({ vehicles: newVehicles, ramps: newRamps });
     if(vehicle) {
-        handleLogAction('RAMP_CLEAR', `${vehicle.licensePlate} işlemi tamamlandı. Rampa: ${ramp.name}`);
+        handleLogAction('RAMP_CLEAR', `${vehicle.licensePlate} işlemi tamamlandı. Rampa: ${ramp.name}. Gelen Çuval: ${incomingSacks}, Giden Çuval: ${outgoingSacks}`);
     }
   };
 
@@ -764,7 +778,7 @@ const App: React.FC = () => {
     if (!action || !targetId) return;
 
     if (action === 'CLEAR_RAMP') {
-      performClearRamp(targetId);
+       // Handled by CompleteRampModal
     } else if (action === 'CANCEL_WAITING') {
       performCancelWaitingVehicle(targetId);
     } else if (action === 'CANCEL_PLANNED') {
@@ -947,30 +961,35 @@ const App: React.FC = () => {
   };
 
   // Quantity Edit Handlers
-  const openEditQuantity = (vehicleId: string, currentCount: number) => {
-    setEditingQuantityVehicleId(vehicleId);
-    setCurrentQuantityToEdit(currentCount);
+  const openEditQuantity = (vehicleId: string, currentCount: number, incomingSacks: number = 0, outgoingSacks: number = 0, hideSacks: boolean = false) => {
+    setEditingVehicleId(vehicleId);
+    setEditingValues({
+        count: currentCount,
+        incomingSacks,
+        outgoingSacks
+    });
+    setHideSackFieldsInEdit(hideSacks);
     setIsEditQuantityModalOpen(true);
   };
 
-  const handleUpdateQuantity = (newCount: number) => {
-    if (!editingQuantityVehicleId) return;
+  const handleUpdateQuantity = (newCount: number, newIncoming: number, newOutgoing: number) => {
+    if (!editingVehicleId) return;
     
-    const vehicle = vehicles.find(v => v.id === editingQuantityVehicleId);
+    const vehicle = vehicles.find(v => v.id === editingVehicleId);
     const newVehicles = vehicles.map(v => 
-        v.id === editingQuantityVehicleId 
-            ? { ...v, productCount: newCount } 
+        v.id === editingVehicleId 
+            ? { ...v, productCount: newCount, incomingSackCount: newIncoming, outgoingSackCount: newOutgoing } 
             : v
     );
     setVehicles(newVehicles);
     pushUpdate({ vehicles: newVehicles });
     
     setIsEditQuantityModalOpen(false);
-    setEditingQuantityVehicleId(null);
+    setEditingVehicleId(null);
 
     if (vehicle) {
         const oldQuantity = vehicle.productCount;
-        handleLogAction('UPDATE', `${vehicle.licensePlate} adet bilgisi güncellendi. Eski: ${oldQuantity} -> Yeni: ${newCount}`);
+        handleLogAction('UPDATE', `${vehicle.licensePlate} bilgileri güncellendi. Yük: ${oldQuantity}->${newCount}, Çuval(G):${newIncoming}, Çuval(Ç):${newOutgoing}`);
     }
   };
 
@@ -989,7 +1008,6 @@ const App: React.FC = () => {
                     <span className="text-orange-600">Inbound</span>
                 </h1>
                 <div className="flex items-center gap-2">
-                    {!isLoggedIn && <span className="hidden sm:inline text-xs text-slate-400 font-medium">Misafir Görünümü</span>}
                     {isFirebaseConfigured() ? (
                         isSynced ? (
                              <span className="flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-100">
@@ -1179,6 +1197,7 @@ const App: React.FC = () => {
                 vehicles={vehicles}
                 onOpenEditor={() => setIsPlannedTripsEditorOpen(true)}
                 onEditQuantity={isLoggedIn ? openEditQuantity : undefined}
+                onAssignRamp={handleOpenAssignModal}
             />
         </div>
       </main>
@@ -1252,7 +1271,10 @@ const App: React.FC = () => {
                 isOpen={isEditQuantityModalOpen}
                 onClose={() => setIsEditQuantityModalOpen(false)}
                 onSave={handleUpdateQuantity}
-                currentQuantity={currentQuantityToEdit}
+                currentQuantity={editingValues.count}
+                currentIncomingSacks={editingValues.incomingSacks}
+                currentOutgoingSacks={editingValues.outgoingSacks}
+                hideSackFields={hideSackFieldsInEdit}
             />
 
             <AssignRampModal
@@ -1317,6 +1339,17 @@ const App: React.FC = () => {
                 confirmText="Sistemi Sıfırla"
                 cancelText="Vazgeç"
                 isDanger={true}
+            />
+
+            {/* Ramp Completion Modal */}
+            <CompleteRampModal 
+                isOpen={!!completingRampId}
+                onClose={() => setCompletingRampId(null)}
+                onConfirm={handleCompleteRamp}
+                vehiclePlate={ramps.find(r => r.id === completingRampId)?.currentVehicleId 
+                    ? vehicles.find(v => v.id === ramps.find(r => r.id === completingRampId)?.currentVehicleId)?.licensePlate || ''
+                    : ''
+                }
             />
 
             {/* Generic Confirmation for Actions (Clear Ramp, Cancel Waiting, Cancel Planned) */}

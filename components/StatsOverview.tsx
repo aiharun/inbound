@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { WarehouseStats } from '../types';
-import { Truck, Timer, Boxes, Hourglass, XCircle } from 'lucide-react';
+import { Truck, Timer, Boxes, Hourglass, XCircle, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 
 interface StatsOverviewProps {
   stats: WarehouseStats;
@@ -24,14 +25,6 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats, isLoggedIn 
         color: 'orange' 
     },
     { 
-        label: 'Ort. İşlem Süresi', 
-        value: `${stats.avgTurnaroundMinutes} dk`, 
-        sub: 'Rampa - Çıkış', 
-        icon: Timer, 
-        color: 'slate',
-        requiresLogin: true
-    },
-    { 
         label: 'Toplam Adet', 
         value: stats.totalProducts.toLocaleString(), 
         sub: 'Birim İşlenen', 
@@ -45,13 +38,38 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats, isLoggedIn 
         icon: XCircle, 
         color: 'red' 
     },
+    { 
+        label: 'Ort. İşlem Süresi', 
+        value: `${stats.avgTurnaroundMinutes} dk`, 
+        sub: 'Rampa - Çıkış', 
+        icon: Timer, 
+        color: 'slate',
+        requiresLogin: true
+    },
+    { 
+        label: 'Alınan Çuval', 
+        value: stats.totalIncomingSacks.toLocaleString(), 
+        sub: 'İndirilen', 
+        icon: ArrowDownToLine, 
+        color: 'blue' 
+    },
+    { 
+        label: 'Verilen Çuval', 
+        value: stats.totalOutgoingSacks.toLocaleString(), 
+        sub: 'Yüklenen', 
+        icon: ArrowUpFromLine, 
+        color: 'purple' 
+    },
   ];
 
   const visibleCards = cards.filter(c => !c.requiresLogin || isLoggedIn);
-  const gridCols = visibleCards.length === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4';
+  
+  // Grid Layout: 1 col mobile, 2 cols tablet, 4 cols desktop.
+  // With 7 items (when logged in), 4 cols results in 4 items on row 1, and 3 items on row 2.
+  const gridClass = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8";
 
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4 mb-8`}>
+    <div className={gridClass}>
       {visibleCards.map((card, idx) => (
         <div key={idx} className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>

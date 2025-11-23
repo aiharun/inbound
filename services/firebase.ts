@@ -10,7 +10,7 @@ import {
   addDoc,     // Chat ve Log eklemek için gerekli
   query,      // Sıralama için gerekli
   orderBy,    // Sıralama için gerekli
-  limit       // Son 100 mesajı çekmek için gerekli
+  limit       // Son X veriyi çekmek için gerekli
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -31,10 +31,11 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ANA VERİ REFERANSI (Araçlar, Rampalar, Sürücüler, Kullanıcılar burada duracak)
+// Tek bir döküman üzerinden çalıştığı için senkronizasyon %100 kararlıdır.
 const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// --- SİHİRLİ TEMİZLEYİCİ ---
-// undefined değerleri temizler, sistemi çökmesini engeller
+// --- SİHİRLİ TEMİZLEYİCİ (Undefined Hatasını Çözen Kahraman) ---
+// Verinin içindeki "undefined" değerleri temizler, sistemin çökmesini engeller.
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   return JSON.parse(JSON.stringify(data));
@@ -61,14 +62,14 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
     console.error("Firebase Bağlantı Hatası:", error);
   });
   
-  // Sadece ana dinleyiciyi kapatmak yeterli, React hook'ları diğerlerini yönetir
   return unsubscribeMain;
 };
 
 export const updateData = async (updates: any) => {
   try {
-    // Önce temizle, sonra gönder
+    // Önce veriyi temizle (undefined hatasına karşı)
     const cleanUpdates = cleanData(updates);
+    // Sonra gönder (merge: true ile sadece değişeni yazar)
     await setDoc(DATA_DOC_REF, cleanUpdates, { merge: true });
   } catch (error) {
     console.error("Veri güncelleme hatası:", error);
@@ -86,13 +87,14 @@ export const resetCloudData = async (fullData: any) => {
 };
 
 // ==========================================
-// 2. CHAT FONKSİYONLARI (App.tsx'in istediği kısımlar)
+// 2. CHAT FONKSİYONLARI (App.tsx için gerekli)
 // ==========================================
 
 export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
   if (!db) return () => {};
 
   // Mesajları tarihe göre sıralayıp son 100 tanesini getir
+  // Sildiğin koleksiyon yeni mesaj atılınca otomatik oluşacak
   const q = query(
     collection(db, "chat_messages"), 
     orderBy("timestamp", "asc"), 
@@ -123,7 +125,7 @@ export const sendChatMessage = async (message: any) => {
 };
 
 // ==========================================
-// 3. LOG FONKSİYONLARI (App.tsx'in istediği kısımlar)
+// 3. LOG FONKSİYONLARI (App.tsx için gerekli)
 // ==========================================
 
 export const addSystemLog = async (log: any) => {

@@ -1,3 +1,4 @@
+
 export enum VehicleStatus {
   INCOMING = 'INCOMING',
   WAITING = 'WAITING',
@@ -18,6 +19,8 @@ export interface Vehicle {
   status: VehicleStatus;
   tripCount: number;
   isUnplanned?: boolean;
+  incomingSackCount?: number; // New field: Gelen Çuval
+  outgoingSackCount?: number; // New field: Giden Çuval
 }
 
 export interface Ramp {
@@ -33,6 +36,8 @@ export interface WarehouseStats {
   totalProducts: number;
   canceledCount: number;
   waitingCount: number;
+  totalIncomingSacks: number; // New field
+  totalOutgoingSacks: number; // New field
 }
 
 export interface User {

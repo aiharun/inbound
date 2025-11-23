@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, Pencil, Edit, Package } from 'lucide-react';
+import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, Pencil, Edit, Package, ArrowDownToLine, ArrowUpFromLine, LogIn, LogOut } from 'lucide-react';
 import { DriverInfo } from '../data/drivers';
 import { Vehicle, VehicleStatus } from '../types';
 
@@ -15,7 +16,8 @@ interface PlannedTripsListProps {
   readOnly?: boolean;
   vehicles: Vehicle[];
   onOpenEditor?: () => void;
-  onEditQuantity?: (vehicleId: string, currentCount: number) => void;
+  onEditQuantity?: (vehicleId: string, currentCount: number, incomingSacks?: number, outgoingSacks?: number, hideSacks?: boolean) => void;
+  onAssignRamp?: (vehicleId: string) => void;
 }
 
 export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({ 
@@ -30,7 +32,8 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   readOnly = false, 
   vehicles,
   onOpenEditor,
-  onEditQuantity
+  onEditQuantity,
+  onAssignRamp
 }) => {
   const trips = (Object.entries(scheduledTrips) as [string, number][])
     .sort((a, b) => b[1] - a[1]);
@@ -42,16 +45,13 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   // Also ensure it's not in the canceled list
   const planned = trips.filter(([plate, count]) => count > 0 && !canceledPlates.has(plate));
   
-  // Filter for Processed: Has 0 trips OR has history of completion/docking
-  // This ensures vehicles that are completed but have new trips planned still show up here.
+  // Filter for Processed: Has 0 trips OR has history of completion/docking/waiting
   const processed = trips.filter(([plate, count]) => {
     if (canceledPlates.has(plate)) return false;
-    // If this specific vehicle (plate) has any history in the vehicle log (Docking or Completed), show it.
-    // OR if the count is 0 (meaning it was processed down to 0).
     
     const hasHistory = vehicles.some(v => 
         v.licensePlate === plate && 
-        (v.status === VehicleStatus.DOCKING || v.status === VehicleStatus.COMPLETED)
+        (v.status === VehicleStatus.DOCKING || v.status === VehicleStatus.COMPLETED || v.status === VehicleStatus.WAITING)
     );
     
     return count === 0 || hasHistory;
@@ -59,7 +59,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
 
   if (trips.length === 0 && canceledList.length === 0 && !onOpenEditor) return null;
 
-  const getVehicleStatus = (plate: string): 'DOCKING' | 'COMPLETED' | 'UNKNOWN' => {
+  const getVehicleStatus = (plate: string): 'DOCKING' | 'COMPLETED' | 'WAITING' | 'UNKNOWN' => {
     // Find the latest vehicle entry for this plate
     // We sort by arrival time desc to get the very latest status
     const plateVehicles = vehicles.filter(v => v.licensePlate === plate);
@@ -67,6 +67,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
     
     if (!latestVehicle) return 'UNKNOWN';
     if (latestVehicle.status === VehicleStatus.DOCKING) return 'DOCKING';
+    if (latestVehicle.status === VehicleStatus.WAITING) return 'WAITING';
     if (latestVehicle.status === VehicleStatus.COMPLETED) return 'COMPLETED';
     return 'UNKNOWN';
   };
@@ -74,7 +75,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   const renderCard = (plate: string, count: number, type: 'PLANNED' | 'PROCESSED' | 'CANCELED') => {
     const driver = drivers[plate];
     const note = vehicleNotes[plate];
-    let status: 'DOCKING' | 'COMPLETED' | 'UNKNOWN' = 'UNKNOWN';
+    let status: 'DOCKING' | 'COMPLETED' | 'WAITING' | 'UNKNOWN' = 'UNKNOWN';
     let tripHistoryCount = 0;
     
     // Find the latest vehicle entry to get details like product count
@@ -101,6 +102,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
     }
 
     const isDocking = status === 'DOCKING';
+    const isWaiting = status === 'WAITING';
     const isCompleted = type === 'PROCESSED' && (status === 'COMPLETED');
     const isCanceled = type === 'CANCELED';
     
@@ -110,11 +112,13 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
             className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all group ${
                 isDocking 
                 ? 'bg-orange-50 border-orange-200 shadow-sm' 
-                : isCanceled
-                    ? 'bg-red-50 border-red-100 opacity-80'
-                    : isCompleted 
-                        ? 'bg-slate-50 border-slate-100 opacity-60 grayscale-[0.5]' 
-                        : 'bg-white border-slate-200 hover:border-orange-200 hover:shadow-md'
+                : isWaiting
+                    ? 'bg-amber-50 border-amber-200 shadow-sm'
+                    : isCanceled
+                        ? 'bg-red-50 border-red-100 opacity-80'
+                        : isCompleted 
+                            ? 'bg-slate-50 border-slate-100 opacity-60 grayscale-[0.5]' 
+                            : 'bg-white border-slate-200 hover:border-orange-200 hover:shadow-md'
             }`}
         >
             <div className="flex justify-between items-start mb-3">
@@ -132,6 +136,11 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                             <div className="flex items-center gap-1 text-orange-700 font-bold text-xs bg-orange-100 px-2 py-1 rounded-lg border border-orange-200 animate-pulse">
                                 <Truck size={14} />
                                 Rampada
+                            </div>
+                        ) : isWaiting ? (
+                            <div className="flex items-center gap-1 text-amber-700 font-bold text-xs bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 animate-pulse">
+                                <Clock size={14} />
+                                Sırada
                             </div>
                         ) : isCompleted ? (
                             <div className="flex items-center gap-1 text-emerald-600 font-bold text-xs bg-emerald-50 px-2 py-1 rounded-lg">
@@ -184,32 +193,76 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                 )}
             </div>
             
-            {/* Quantity Display for Processed Items */}
+            {/* Stats Display for Processed Items */}
             {type === 'PROCESSED' && latestVehicle && (
-                <div className={`flex items-center gap-2 mb-3 p-2 rounded-lg border group/qty ${isDocking ? 'bg-orange-100/50 border-orange-200 text-orange-800' : 'bg-slate-100/50 border-slate-200 text-slate-600'}`}>
-                    <Package size={14} className={isDocking ? 'text-orange-500' : 'text-slate-400'} />
-                    <span className="text-xs font-medium">Adet:</span>
-                    <span className="text-sm font-bold font-mono ml-auto">
-                        {latestVehicle.productCount.toLocaleString()}
-                    </span>
-                    {!readOnly && onEditQuantity && (
-                        <button
-                             onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onEditQuantity(latestVehicle.id, latestVehicle.productCount);
-                             }}
-                             className="ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm"
-                             title="Adet Düzenle"
-                        >
-                            <Edit size={14} />
-                        </button>
+                <div className="mb-3 space-y-1">
+                     <div className={`flex items-center gap-2 p-2 rounded-lg border group/qty ${isDocking ? 'bg-orange-100/50 border-orange-200 text-orange-800' : isWaiting ? 'bg-amber-100/50 border-amber-200 text-amber-800' : 'bg-slate-100/50 border-slate-200 text-slate-600'}`}>
+                        <Package size={14} className={isDocking ? 'text-orange-500' : isWaiting ? 'text-amber-500' : 'text-slate-400'} />
+                        <span className="text-xs font-medium">Adet:</span>
+                        <span className="text-sm font-bold font-mono ml-auto">
+                            {latestVehicle.productCount.toLocaleString()}
+                        </span>
+                        {!readOnly && onEditQuantity && !isCompleted && (
+                            <button
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    // Pass true for hideSacks if vehicle is waiting
+                                    onEditQuantity(latestVehicle.id, latestVehicle.productCount, latestVehicle.incomingSackCount || 0, latestVehicle.outgoingSackCount || 0, isWaiting);
+                                }}
+                                className={`ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm opacity-100`}
+                                title="Adet Düzenle"
+                            >
+                                <Edit size={14} />
+                            </button>
+                        )}
+                    </div>
+                    
+                    {(latestVehicle.incomingSackCount !== undefined || latestVehicle.outgoingSackCount !== undefined) && (
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
+                            {latestVehicle.incomingSackCount !== undefined && latestVehicle.incomingSackCount > 0 && (
+                                <div className="flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                                    <ArrowDownToLine size={10} />
+                                    <span>Alınan: {latestVehicle.incomingSackCount}</span>
+                                </div>
+                            )}
+                            {latestVehicle.outgoingSackCount !== undefined && latestVehicle.outgoingSackCount > 0 && (
+                                <div className="flex items-center gap-1 text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-100">
+                                    <ArrowUpFromLine size={10} />
+                                    <span>Verilen: {latestVehicle.outgoingSackCount}</span>
+                                </div>
+                            )}
+                        </div>
                     )}
+
+                    {/* Entry/Exit Times */}
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                                <LogIn size={10} /> Giriş
+                            </span>
+                            <span className="font-mono font-bold text-slate-600">
+                                {latestVehicle.dockingStartTime 
+                                    ? new Date(latestVehicle.dockingStartTime).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})
+                                    : '--:--'}
+                            </span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                                Çıkış <LogOut size={10} />
+                            </span>
+                            <span className="font-mono font-bold text-slate-600">
+                                {latestVehicle.exitTime 
+                                    ? new Date(latestVehicle.exitTime).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})
+                                    : '--:--'}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             )}
             
             {/* Driver Info Section */}
-            <div className={`border-t pt-3 mb-2 space-y-2 ${isDocking ? 'border-orange-200' : isCanceled ? 'border-red-100' : 'border-slate-100'}`}>
+            <div className={`border-t pt-3 mb-2 space-y-2 ${isDocking ? 'border-orange-200' : isWaiting ? 'border-amber-200' : isCanceled ? 'border-red-100' : 'border-slate-100'}`}>
                 {driver ? (
                     <div className="space-y-1">
                         <div className="flex items-center gap-2 text-slate-600">
@@ -240,6 +293,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
             {/* Actions */}
             {!readOnly && (
                 <div className="flex gap-2 mt-auto relative z-10">
+                    {/* PLANNED CARD ACTIONS */}
                     {type === 'PLANNED' && (
                         <>
                             <button
@@ -288,6 +342,27 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                             )}
                         </>
                     )}
+
+                    {/* PROCESSED CARD ACTIONS (Only for Waiting Vehicles) */}
+                    {type === 'PROCESSED' && isWaiting && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (onAssignRamp && latestVehicle) {
+                                    onAssignRamp(latestVehicle.id);
+                                } else {
+                                    onAssign(plate);
+                                }
+                            }}
+                            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm shadow-orange-200 active:scale-95"
+                        >
+                            Rampa Ata <ArrowRight size={12} />
+                        </button>
+                    )}
+
+                    {/* CANCELED CARD ACTIONS */}
                     {type === 'CANCELED' && (
                          <button
                             type="button"
@@ -360,7 +435,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                         </div>
                         <div>
                             <h2 className="font-semibold text-slate-800">İşlemdeki & Tamamlananlar</h2>
-                            <p className="text-xs text-slate-500">Rampada olan veya çıkış yapmış araçlar</p>
+                            <p className="text-xs text-slate-500">Sırada, rampada veya çıkış yapmış araçlar</p>
                         </div>
                     </div>
                     <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full flex items-center gap-1">

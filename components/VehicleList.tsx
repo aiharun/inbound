@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Vehicle, VehicleStatus } from '../types';
 import { CheckCircle2, Clock, Truck, ArrowRight, CalendarDays, Hash, MapPin, Search, ChevronLeft, ChevronRight, Filter, Trash2, XCircle, Edit2 } from 'lucide-react';
@@ -6,7 +7,7 @@ interface VehicleListProps {
   vehicles: Vehicle[];
   onAssignRamp: (vehicleId: string) => void;
   onCancelWaiting?: (vehicleId: string) => void;
-  onEditQuantity?: (vehicleId: string, currentCount: number) => void;
+  onEditQuantity?: (vehicleId: string, currentCount: number, incomingSacks?: number, outgoingSacks?: number, hideSacks?: boolean) => void;
   readOnly?: boolean;
 }
 
@@ -216,8 +217,8 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                         </div>
                         {!readOnly && onEditQuantity && !isCompleted && !isCanceled && (
                             <button
-                                onClick={() => onEditQuantity(vehicle.id, vehicle.productCount)}
-                                className="ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-slate-100 hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm"
+                                onClick={() => onEditQuantity(vehicle.id, vehicle.productCount, vehicle.incomingSackCount || 0, vehicle.outgoingSackCount || 0, isWaiting)}
+                                className="ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-slate-100 hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm opacity-100"
                                 title="Adet Düzenle"
                             >
                                 <Edit2 size={14} />
