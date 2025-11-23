@@ -8,7 +8,6 @@ import {
   setDoc 
 } from "firebase/firestore";
 
-// Senin Proje Ayarların (Aynen korundu)
 const firebaseConfig = {
   apiKey: "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8",
   authDomain: "inbound-b9ab6.firebaseapp.com",
@@ -19,27 +18,29 @@ const firebaseConfig = {
   measurementId: "G-HJ8P8KLN7J"
 };
 
-// Uygulamayı başlat
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Verilerin tutulacağı tekil döküman referansı
-// Bu sefer senin kodundaki "dockflow" ismini kullandım ki karışıklık olmasın
 const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// 1. DİNLEME FONKSİYONU
-// Veritabanını canlı olarak izler ve React'e haber verir
+// --- SİHİRLİ TEMİZLEYİCİ FONKSİYON ---
+// Bu fonksiyon verinin içindeki tüm "undefined" değerleri temizler.
+// Firestore hatasını engelleyen kilit nokta burasıdır.
+const cleanData = (data: any) => {
+  if (data === undefined) return null;
+  // JSON.stringify undefined alanları otomatik olarak siler.
+  // JSON.parse ise onu tekrar nesneye çevirir.
+  return JSON.parse(JSON.stringify(data));
+};
+
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
-  console.log("🔥 Firebase Canlı Bağlantı Başlatılıyor...");
+  console.log("🔥 Firebase Canlı Bağlantı Aktif...");
   
   const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
-      // Veri varsa React'e gönder
       const data = docSnapshot.data();
       onDataUpdate(data);
     } else {
-      // Veri yoksa (Proje yeni açıldıysa)
-      console.log("Veri bulunamadı, başlangıç bekleniyor.");
       onDataUpdate(null);
     }
   }, (error) => {
@@ -49,30 +50,30 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   return unsubscribe;
 };
 
-// 2. GÜNCELLEME FONKSİYONU
-// React tarafındaki state neyse, aynısını veritabanına yazar
 export const updateData = async (updates: any) => {
   try {
-    // merge: true sayesinde sadece değişen kısımları günceller
-    await setDoc(DATA_DOC_REF, updates, { merge: true });
+    // GÖNDERMEDEN ÖNCE TEMİZLE
+    const cleanUpdates = cleanData(updates);
+    
+    // merge: true ile güncelle
+    await setDoc(DATA_DOC_REF, cleanUpdates, { merge: true });
   } catch (error) {
     console.error("Veri güncelleme hatası:", error);
   }
 };
 
-// 3. SIFIRLAMA FONKSİYONU
-// "Günü Bitir" dediğinde her şeyi sıfırdan yazar
 export const resetCloudData = async (fullData: any) => {
   try {
-    // merge kullanmıyoruz, çünkü tamamen üzerine yazıp temizlemek istiyoruz
-    await setDoc(DATA_DOC_REF, fullData);
+    // GÖNDERMEDEN ÖNCE TEMİZLE
+    const cleanFullData = cleanData(fullData);
+    
+    await setDoc(DATA_DOC_REF, cleanFullData);
     console.log("Veritabanı sıfırlandı.");
   } catch (error) {
     console.error("Veri sıfırlama hatası:", error);
   }
 };
 
-// Yardımcı fonksiyon: App.tsx içinde kontrol için kullanılıyor
 export const isFirebaseConfigured = () => {
   return !!firebaseConfig.apiKey;
 };
