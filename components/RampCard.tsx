@@ -1,15 +1,22 @@
 import React from 'react';
 import { Ramp, Vehicle } from '../types';
-import { Truck, Package, Clock } from 'lucide-react';
+import { Truck, Package, Clock, Undo2, CheckCircle2 } from 'lucide-react';
 
 interface RampCardProps {
   ramp: Ramp;
   vehicle: Vehicle | undefined;
   onClearRamp: (rampId: string) => void;
+  onRevertAssignment?: (rampId: string) => void;
   readOnly?: boolean;
 }
 
-export const RampCard: React.FC<RampCardProps> = ({ ramp, vehicle, onClearRamp, readOnly = false }) => {
+export const RampCard: React.FC<RampCardProps> = ({ 
+    ramp, 
+    vehicle, 
+    onClearRamp, 
+    onRevertAssignment,
+    readOnly = false 
+}) => {
   const isOccupied = ramp.status === 'OCCUPIED';
 
   const calculateDuration = (startTime?: string) => {
@@ -69,12 +76,26 @@ export const RampCard: React.FC<RampCardProps> = ({ ramp, vehicle, onClearRamp, 
       </div>
 
       {isOccupied && vehicle && !readOnly && (
-        <button 
-            onClick={() => onClearRamp(ramp.id)}
-            className="w-full mt-3 py-2 text-xs font-medium text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition-colors"
-        >
-            Tamamla & Boşalt
-        </button>
+        <div className="mt-4 space-y-2">
+            <button 
+                onClick={() => onClearRamp(ramp.id)}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition-colors shadow-sm"
+            >
+                <CheckCircle2 size={14} />
+                Tamamla & Boşalt
+            </button>
+            
+            {onRevertAssignment && (
+                <button 
+                    onClick={() => onRevertAssignment(ramp.id)}
+                    className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition-colors"
+                    title="Yanlışlıkla atandıysa geri al"
+                >
+                    <Undo2 size={14} />
+                    Atamayı Geri Al
+                </button>
+            )}
+        </div>
       )}
     </div>
   );

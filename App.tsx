@@ -79,7 +79,7 @@ const App: React.FC = () => {
   // Confirmation State for Actions
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
-    action: 'CLEAR_RAMP' | 'CANCEL_WAITING' | 'CANCEL_PLANNED' | null;
+    action: 'CLEAR_RAMP' | 'CANCEL_WAITING' | 'CANCEL_PLANNED' | 'REVERT_RAMP' | null;
     targetId: string | null;
     title: string;
     message: string;
@@ -561,6 +561,57 @@ const App: React.FC = () => {
     pushUpdate({ vehicles: newVehicles, ramps: newRamps });
   };
 
+  const initiateRevertRamp = (rampId: string) => {
+    setConfirmState({
+      isOpen: true,
+      action: 'REVERT_RAMP',
+      targetId: rampId,
+      title: 'Atamayı Geri Al',
+      message: 'Araç rampadan alınacak ve tekrar "Planlanan Seferler" listesine eklenecektir. Bu işlem hatalı atamaları düzeltmek içindir. Onaylıyor musunuz?',
+      isDanger: true
+    });
+  };
+
+  const performRevertRamp = (rampId: string) => {
+    const ramp = ramps.find(r => r.id === rampId);
+    if (!ramp || !ramp.currentVehicleId) return;
+    
+    const vehicleId = ramp.currentVehicleId;
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    
+    // 1. Reset Ramp to FREE
+    const newRamps = ramps.map(r => 
+        r.id === rampId 
+            ? { ...r, status: 'FREE' as const, currentVehicleId: null } 
+            : r
+    );
+    setRamps(newRamps);
+
+    // 2. Delete vehicle from list (as if it never started docking)
+    const newVehicles = vehicles.filter(v => v.id !== vehicleId);
+    setVehicles(newVehicles);
+
+    // 3. Increment Scheduled Trips (Back to queue)
+    let newScheduled = scheduledTrips;
+    if (vehicle) {
+        const plate = vehicle.licensePlate;
+        const currentScheduled = scheduledTrips[plate];
+        
+        if (currentScheduled !== undefined) {
+             newScheduled = { ...scheduledTrips, [plate]: currentScheduled + 1 };
+        } else {
+             newScheduled = { ...scheduledTrips, [plate]: 1 };
+        }
+        setScheduledTrips(newScheduled);
+    }
+
+    pushUpdate({
+        ramps: newRamps,
+        vehicles: newVehicles,
+        scheduledTrips: newScheduled
+    });
+  };
+
   const executeConfirmation = () => {
     const { action, targetId } = confirmState;
     if (!action || !targetId) return;
@@ -571,6 +622,8 @@ const App: React.FC = () => {
       performCancelWaitingVehicle(targetId);
     } else if (action === 'CANCEL_PLANNED') {
       performCancelTrip(targetId);
+    } else if (action === 'REVERT_RAMP') {
+      performRevertRamp(targetId);
     }
   };
 
@@ -676,7 +729,7 @@ const App: React.FC = () => {
         vehicles: newVehicles, 
         ramps: newRamps, 
         scheduledTrips: newScheduled, 
-        availablePlates: newAvailable,
+        availablePlates: newAvailable, 
         drivers: newDrivers
     });
   };
@@ -903,6 +956,7 @@ const App: React.FC = () => {
                         ramp={ramp} 
                         vehicle={vehicles.find(v => v.id === ramp.currentVehicleId)}
                         onClearRamp={initiateClearRamp}
+                        onRevertAssignment={isLoggedIn ? initiateRevertRamp : undefined}
                         readOnly={!isLoggedIn}
                     />
                 </div>
