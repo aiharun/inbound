@@ -5,7 +5,12 @@ import {
   getFirestore, 
   doc, 
   onSnapshot, 
-  setDoc 
+  setDoc,
+  collection, // Chat için gerekli
+  addDoc,     // Chat için gerekli
+  query,      // Chat için gerekli
+  orderBy,    // Chat için gerekli
+  limit       // Chat için gerekli
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -25,32 +30,28 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Verilerin tutulacağı tekil döküman referansı
-// "dockflow" koleksiyonu içinde "live_data" dökümanı
+// ANA VERİ REFERANSI (Araçlar, Rampalar vb.)
 const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// --- SİHİRLİ TEMİZLEYİCİ (Undefined Hatasını Çözen Kısım) ---
-// Verinin içindeki "undefined" değerleri temizler, patlamayı önler.
+// --- SİHİRLİ TEMİZLEYİCİ ---
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
-  // JSON.stringify undefined alanları otomatik siler.
-  // Bu işlem sayesinde "Unsupported field value: undefined" hatası almazsın.
   return JSON.parse(JSON.stringify(data));
 };
 
-// 1. DİNLEME FONKSİYONU
-// Tüm veriyi (Mesajlar, Plakalar, Kullanıcılar) tek seferde dinler.
+// ==========================================
+// 1. ANA VERİ FONKSİYONLARI (Araçlar, Rampalar)
+// ==========================================
+
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
-  console.log("🔥 Firebase Canlı Bağlantı (Tek Döküman) Başlatılıyor...");
+  console.log("🔥 Firebase Canlı Bağlantı Başlatıldı...");
   
   const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
       const data = docSnapshot.data();
-      // Saat bilgisi ekleyerek console'dan takibi kolaylaştırıyoruz
       console.log("🔥 VERİ GELDİ (Saat: " + new Date().toLocaleTimeString() + ")");
       onDataUpdate(data);
     } else {
-      console.log("Veri henüz yok (Yeni Proje).");
       onDataUpdate(null);
     }
   }, (error) => {
@@ -60,34 +61,58 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   return unsubscribe;
 };
 
-// 2. GÜNCELLEME FONKSİYONU
 export const updateData = async (updates: any) => {
   try {
-    // Mesaj ekleme/silme işlemleri React tarafında yapılıp
-    // buraya "güncel mesaj listesi" olarak gelir.
-    // Biz sadece temizleyip kaydederiz.
-    
-    // ÖNCE TEMİZLE (Hata almamak için)
     const cleanUpdates = cleanData(updates);
-    
-    // Sonra gönder (merge: true ile sadece değişeni yazar)
     await setDoc(DATA_DOC_REF, cleanUpdates, { merge: true });
   } catch (error) {
     console.error("Veri güncelleme hatası:", error);
   }
 };
 
-// 3. SIFIRLAMA FONKSİYONU
 export const resetCloudData = async (fullData: any) => {
   try {
-    // ÖNCE TEMİZLE
     const cleanFullData = cleanData(fullData);
-    
-    // Her şeyi silip baştan yazar
     await setDoc(DATA_DOC_REF, cleanFullData);
     console.log("Veritabanı sıfırlandı.");
   } catch (error) {
     console.error("Veri sıfırlama hatası:", error);
+  }
+};
+
+// ==========================================
+// 2. CHAT FONKSİYONLARI (Eksik olanlar burasıydı)
+// ==========================================
+
+export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
+  // Sohbet mesajlarını "chat_messages" koleksiyonundan çekiyoruz
+  // Eskiden kalma veriyi korumak için ayrı koleksiyon mantıklı
+  const q = query(
+    collection(db, "chat_messages"), 
+    orderBy("timestamp", "asc"), 
+    limit(100)
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const messages = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    onMessages(messages);
+  }, (error) => {
+    console.error("Chat bağlantı hatası:", error);
+  });
+
+  return unsubscribe;
+};
+
+export const sendChatMessage = async (message: any) => {
+  try {
+    const cleanMessage = cleanData(message);
+    // Mesajları ayrı bir koleksiyona ekliyoruz
+    await addDoc(collection(db, "chat_messages"), cleanMessage);
+  } catch (error) {
+    console.error("Mesaj gönderme hatası:", error);
   }
 };
 
