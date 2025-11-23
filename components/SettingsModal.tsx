@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, Save, Edit2, User, Phone, Truck } from 'lucide-react';
+import { X, Search, Save, Edit2, User, Phone, Truck, Trash2, AlertTriangle } from 'lucide-react';
 import { DriverInfo } from '../data/drivers';
 
 interface SettingsModalProps {
@@ -8,6 +8,7 @@ interface SettingsModalProps {
   drivers: Record<string, DriverInfo>;
   onUpdateDriver: (plate: string, name: string, phone: string) => void;
   availablePlates: string[];
+  onSystemReset: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -15,7 +16,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   drivers,
   onUpdateDriver,
-  availablePlates
+  availablePlates,
+  onSystemReset
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingPlate, setEditingPlate] = useState<string | null>(null);
@@ -73,13 +75,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     placeholder="Plaka veya sürücü adı ara..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
                 />
             </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-y-auto flex-1 border border-slate-200 rounded-xl custom-scrollbar">
+        <div className="overflow-y-auto flex-1 border border-slate-200 rounded-xl custom-scrollbar mb-4">
             <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 sticky top-0 z-10 shadow-sm">
                     <tr>
@@ -110,7 +112,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 type="text" 
                                                 value={editName}
                                                 onChange={(e) => setEditName(e.target.value)}
-                                                className="w-full p-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
+                                                className="w-full p-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
                                                 placeholder="Ad Soyad"
                                                 autoFocus
                                             />
@@ -129,7 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 type="text" 
                                                 value={editPhone}
                                                 onChange={(e) => setEditPhone(e.target.value)}
-                                                className="w-full p-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none"
+                                                className="w-full p-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
                                                 placeholder="5XX XXX XX XX"
                                             />
                                         </div>
@@ -160,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     ) : (
                                         <button 
                                             onClick={() => startEdit(plate)}
-                                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                                            className="p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded-lg transition-colors"
                                             title="Düzenle"
                                         >
                                             <Edit2 size={18} />
@@ -172,6 +174,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     })}
                 </tbody>
             </table>
+        </div>
+
+        {/* Footer Actions / Danger Zone */}
+        <div className="mt-auto pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="text-xs text-slate-400 flex items-center gap-1">
+                <AlertTriangle size={12} className="text-amber-500" />
+                <span>Sistem verileri sadece yönetici onayı ile silinmelidir.</span>
+            </div>
+            <button
+                onClick={onSystemReset}
+                className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-xl transition-colors text-sm font-bold border border-red-100 shadow-sm"
+            >
+                <Trash2 size={16} />
+                Sistemi Sıfırla (Reset)
+            </button>
         </div>
       </div>
     </div>

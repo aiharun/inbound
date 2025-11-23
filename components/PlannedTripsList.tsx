@@ -1,12 +1,11 @@
 import React from 'react';
-import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, AlertCircle } from 'lucide-react';
+import { CalendarClock, ListTodo, CheckCircle2, ArrowRight, User, Phone, Truck, History, XCircle, RotateCcw, Minus, StickyNote, Clock, Pencil, Edit } from 'lucide-react';
 import { DriverInfo } from '../data/drivers';
 import { Vehicle, VehicleStatus } from '../types';
 
 interface PlannedTripsListProps {
   scheduledTrips: Record<string, number>;
   canceledTrips: Record<string, number>;
-  canceledExtraPlates?: string[];
   onAssign: (plate: string) => void;
   onCancel: (plate: string) => void;
   onRestore: (plate: string) => void;
@@ -15,12 +14,12 @@ interface PlannedTripsListProps {
   vehicleNotes?: Record<string, string>;
   readOnly?: boolean;
   vehicles: Vehicle[];
+  onOpenEditor?: () => void;
 }
 
 export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({ 
   scheduledTrips, 
   canceledTrips,
-  canceledExtraPlates = [],
   onAssign, 
   onCancel,
   onRestore,
@@ -28,7 +27,8 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   drivers, 
   vehicleNotes = {},
   readOnly = false, 
-  vehicles
+  vehicles,
+  onOpenEditor
 }) => {
   const trips = (Object.entries(scheduledTrips) as [string, number][])
     .sort((a, b) => b[1] - a[1]);
@@ -55,7 +55,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
     return count === 0 || hasHistory;
   });
 
-  if (trips.length === 0 && canceledList.length === 0) return null;
+  if (trips.length === 0 && canceledList.length === 0 && !onOpenEditor) return null;
 
   const getVehicleStatus = (plate: string): 'DOCKING' | 'COMPLETED' | 'UNKNOWN' => {
     // Find the latest vehicle entry for this plate
@@ -86,10 +86,6 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
         v.licensePlate === plate && 
         v.status === VehicleStatus.DOCKING
     );
-
-    // Check if marked as unplanned/extra in history
-    const isUnplannedVehicle = vehicles.some(v => v.licensePlate === plate && v.isUnplanned);
-    const isCanceledExtra = type === 'CANCELED' && canceledExtraPlates.includes(plate);
     
     if (type === 'PROCESSED') {
         status = getVehicleStatus(plate);
@@ -106,7 +102,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
             key={plate} 
             className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all group ${
                 isDocking 
-                ? 'bg-blue-50 border-blue-200 shadow-sm' 
+                ? 'bg-orange-50 border-orange-200 shadow-sm' 
                 : isCanceled
                     ? 'bg-red-50 border-red-100 opacity-80'
                     : isCompleted 
@@ -122,17 +118,11 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                     <p className={`text-lg font-bold font-mono ${isCompleted || isCanceled ? 'text-slate-500 line-through decoration-slate-400' : 'text-slate-800'}`}>
                         {plate}
                     </p>
-                    {(isUnplannedVehicle || isCanceledExtra) && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 mt-1">
-                            <AlertCircle size={10} />
-                            EKSTRA ARAÇ
-                        </span>
-                    )}
                 </div>
                 {type === 'PROCESSED' ? (
                     <div className="flex flex-col items-end gap-1">
                         {isDocking ? (
-                            <div className="flex items-center gap-1 text-blue-700 font-bold text-xs bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 animate-pulse">
+                            <div className="flex items-center gap-1 text-orange-700 font-bold text-xs bg-orange-100 px-2 py-1 rounded-lg border border-orange-200 animate-pulse">
                                 <Truck size={14} />
                                 Rampada
                             </div>
@@ -151,7 +141,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                         
                         {/* Show Trip Count Badge if more than 1 trip */}
                         {tripHistoryCount > 1 && (
-                            <div className="flex items-center gap-1 text-indigo-600 font-bold text-[10px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                            <div className="flex items-center gap-1 text-slate-600 font-bold text-[10px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                 <RotateCcw size={10} />
                                 {tripHistoryCount}. Sefer
                             </div>
@@ -188,7 +178,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
             </div>
             
             {/* Driver Info Section */}
-            <div className={`border-t pt-3 mb-2 space-y-2 ${isDocking ? 'border-blue-200' : isCanceled ? 'border-red-100' : 'border-slate-100'}`}>
+            <div className={`border-t pt-3 mb-2 space-y-2 ${isDocking ? 'border-orange-200' : isCanceled ? 'border-red-100' : 'border-slate-100'}`}>
                 {driver ? (
                     <div className="space-y-1">
                         <div className="flex items-center gap-2 text-slate-600">
@@ -238,7 +228,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                                 <button
                                     type="button"
                                     disabled
-                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-100 text-blue-600 text-xs font-bold rounded-lg cursor-not-allowed border border-blue-200 opacity-60"
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-orange-100 text-orange-600 text-xs font-bold rounded-lg cursor-not-allowed border border-orange-200 opacity-60"
                                 >
                                     <Truck size={12} />
                                     Araç Rampada
@@ -260,7 +250,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                                         e.stopPropagation();
                                         onAssign(plate);
                                     }}
-                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 active:scale-95"
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm shadow-orange-200 active:scale-95"
                                 >
                                     Rampa Ata <ArrowRight size={12} />
                                 </button>
@@ -275,7 +265,7 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                                 e.stopPropagation();
                                 onRestore(plate);
                             }}
-                            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-300 text-xs font-bold rounded-lg transition-colors"
+                            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 hover:text-orange-600 hover:border-orange-300 text-xs font-bold rounded-lg transition-colors"
                         >
                             <RotateCcw size={14} />
                             Geri Al
@@ -290,36 +280,51 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
   return (
     <div className="space-y-8 mt-8 pb-12">
         {/* Planned Section */}
-        {planned.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg">
-                            <CalendarClock size={18} />
-                        </div>
-                        <div>
-                            <h2 className="font-semibold text-slate-800">Planlanan Seferler</h2>
-                            <p className="text-xs text-slate-500">Rampaya alınmayı bekleyen araçlar</p>
-                        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg">
+                        <CalendarClock size={18} />
                     </div>
+                    <div>
+                        <h2 className="font-semibold text-slate-800">Planlanan Seferler</h2>
+                        <p className="text-xs text-slate-500">Rampaya alınmayı bekleyen araçlar</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
                     <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full flex items-center gap-1">
                         <ListTodo size={12} />
                         {planned.length} Kayıt
                     </span>
+                    {!readOnly && onOpenEditor && (
+                        <button 
+                            onClick={onOpenEditor}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors shadow-sm"
+                        >
+                            <Edit size={12} />
+                            Listeyi Düzenle
+                        </button>
+                    )}
                 </div>
-                
+            </div>
+            
+            {planned.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-6">
                     {planned.map(([plate, count]) => renderCard(plate, count, 'PLANNED'))}
                 </div>
-            </div>
-        )}
+            ) : (
+                <div className="p-8 text-center text-slate-400 italic text-sm">
+                    Planlanan sefer bulunmamaktadır. "Listeyi Düzenle" butonunu kullanarak ekleyebilirsiniz.
+                </div>
+            )}
+        </div>
 
         {/* Processed Section */}
         {processed.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
+                        <div className="p-1.5 bg-slate-200 text-slate-700 rounded-lg">
                             <History size={18} />
                         </div>
                         <div>

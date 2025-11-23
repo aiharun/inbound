@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -28,7 +28,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200">
         <div className="flex items-start gap-4 mb-4">
-            <div className={`p-3 rounded-full flex-shrink-0 ${isDanger ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+            <div className={`p-3 rounded-full flex-shrink-0 ${isDanger ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
                 <AlertTriangle size={24} />
             </div>
             <div>
@@ -52,7 +52,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 className={`px-4 py-2 text-white font-bold rounded-xl shadow-md transition-all ${
                     isDanger 
                     ? 'bg-red-600 hover:bg-red-700 shadow-red-200' 
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
+                    : 'bg-orange-600 hover:bg-orange-700 shadow-orange-200'
                 }`}
             >
                 {confirmText}

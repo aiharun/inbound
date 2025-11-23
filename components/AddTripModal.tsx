@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Truck, Repeat, Save } from 'lucide-react';
+import { X, Truck, Repeat, Save, ChevronDown } from 'lucide-react';
 
 interface AddTripModalProps {
   isOpen: boolean;
@@ -43,21 +43,19 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Araç Plakası</label>
             <div className="relative">
-              <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                list="trip-plate-suggestions"
+              <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+              <select
                 value={plate}
                 onChange={(e) => setPlate(e.target.value)}
-                placeholder="34 ABC 123"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono uppercase transition-all"
+                className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none font-mono uppercase transition-all appearance-none cursor-pointer text-slate-700"
                 autoFocus
-              />
-              <datalist id="trip-plate-suggestions">
+              >
+                <option value="" disabled>Plaka Seçiniz</option>
                 {availablePlates.map(p => (
-                    <option key={p} value={p} />
+                    <option key={p} value={p}>{p}</option>
                 ))}
-              </datalist>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
             </div>
           </div>
 
@@ -70,7 +68,7 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
                 min="1"
                 value={count}
                 onChange={(e) => setCount(parseInt(e.target.value) || 1)}
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
               />
             </div>
             <p className="text-xs text-slate-500 mt-1 ml-1">Bu plaka için toplam kaç giriş bekleniyor?</p>
@@ -86,7 +84,8 @@ export const AddTripModal: React.FC<AddTripModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 text-white font-bold bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
+              disabled={!plate}
+              className="flex-1 px-4 py-3 text-white font-bold bg-orange-600 hover:bg-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={18} />
               Kaydet

@@ -22,7 +22,7 @@ export const EditNoteModal: React.FC<EditNoteModalProps> = ({ isOpen, onClose, o
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 m-4 animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <FileText className="text-blue-600" size={24} />
+            <FileText className="text-orange-600" size={24} />
             Not Düzenle
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition">
@@ -36,7 +36,7 @@ export const EditNoteModal: React.FC<EditNoteModalProps> = ({ isOpen, onClose, o
                 <textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none h-32 text-slate-700"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none h-32 text-slate-700"
                     placeholder="Araç veya operasyon ile ilgili notlar..."
                     autoFocus
                 />
@@ -51,7 +51,7 @@ export const EditNoteModal: React.FC<EditNoteModalProps> = ({ isOpen, onClose, o
                 </button>
                 <button 
                     onClick={() => onSave(note)} 
-                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-200 hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
                 >
                     <Save size={18} />
                     Kaydet

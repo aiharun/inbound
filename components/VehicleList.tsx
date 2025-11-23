@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Vehicle, VehicleStatus } from '../types';
-import { CheckCircle2, Clock, Truck, ArrowRight, CalendarDays, Hash, MapPin, AlertCircle, Search, ChevronLeft, ChevronRight, Filter, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Truck, ArrowRight, CalendarDays, Hash, MapPin, Search, ChevronLeft, ChevronRight, Filter, Trash2, XCircle } from 'lucide-react';
 
 interface VehicleListProps {
   vehicles: Vehicle[];
@@ -49,7 +49,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
         );
       case VehicleStatus.DOCKING:
         return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-100 text-xs font-bold">
                 <Truck size={14}/> Rampada
             </span>
         );
@@ -76,7 +76,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
       <div className="px-6 py-6 border-b border-slate-100 bg-white">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div className="flex items-center gap-3">
-                <div className="bg-indigo-50 p-2.5 rounded-xl text-indigo-600">
+                <div className="bg-orange-50 p-2.5 rounded-xl text-orange-600">
                     <CalendarDays size={22} />
                 </div>
                 <div>
@@ -105,7 +105,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                         setSearchTerm(e.target.value);
                         setCurrentPage(1); // Reset to page 1 on search
                     }}
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
                 />
             </div>
 
@@ -174,17 +174,11 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                 <tr key={vehicle.id} className={`group transition-colors hover:bg-slate-50/80 ${isWaiting ? 'bg-amber-50/10' : isCanceled ? 'opacity-60 bg-red-50/10' : ''}`}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-8 rounded-full ${isWaiting ? 'bg-amber-400' : isCompleted ? 'bg-slate-200' : isCanceled ? 'bg-red-200' : 'bg-blue-500'}`}></div>
+                        <div className={`w-1.5 h-8 rounded-full ${isWaiting ? 'bg-amber-400' : isCompleted ? 'bg-slate-200' : isCanceled ? 'bg-red-200' : 'bg-orange-500'}`}></div>
                         <div>
                           <span className={`font-bold font-mono text-base tracking-tight block ${isCanceled ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
                               {vehicle.licensePlate}
                           </span>
-                          {vehicle.isUnplanned && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 mt-0.5">
-                              <AlertCircle size={10} />
-                              EKSTRA
-                            </span>
-                          )}
                         </div>
                     </div>
                   </td>
@@ -200,8 +194,8 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                   <td className="px-6 py-4">
                     {vehicle.rampId ? (
                        <div className="flex items-center gap-1.5">
-                          <MapPin size={14} className="text-indigo-400" />
-                          <span className="text-sm font-semibold text-indigo-900">
+                          <MapPin size={14} className="text-orange-400" />
+                          <span className="text-sm font-semibold text-slate-900">
                              Rampa {parseInt(vehicle.rampId) + 1}
                           </span>
                        </div>
@@ -233,7 +227,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                         <div className="flex justify-end gap-2">
                             <button 
                                 onClick={() => onAssignRamp(vehicle.id)}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all text-xs font-bold shadow-sm hover:shadow-md"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-orange-200 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-all text-xs font-bold shadow-sm hover:shadow-md"
                             >
                                 Atama Yap <ArrowRight size={14} />
                             </button>
@@ -266,7 +260,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                 <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-white"
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-orange-600 hover:border-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-white"
                 >
                     <ChevronLeft size={16} />
                 </button>
@@ -278,7 +272,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, onAssignRamp
                 <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-white"
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-orange-600 hover:border-orange-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-white"
                 >
                     <ChevronRight size={16} />
                 </button>

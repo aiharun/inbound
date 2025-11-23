@@ -52,7 +52,7 @@ export const DriverListModal: React.FC<DriverListModalProps> = ({
                     placeholder="Sürücü adı, plaka veya telefon ara..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
                 />
             </div>
         </div>
@@ -66,9 +66,9 @@ export const DriverListModal: React.FC<DriverListModalProps> = ({
             ) : (
                 <div className="grid grid-cols-1 gap-3">
                     {filteredDrivers.map((driver) => (
-                        <div key={driver.plate} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all group">
+                        <div key={driver.plate} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-orange-200 hover:bg-orange-50/30 transition-all group">
                             <div className="flex items-start sm:items-center gap-4 mb-3 sm:mb-0">
-                                <div className="p-3 bg-slate-100 rounded-full text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                <div className="p-3 bg-slate-100 rounded-full text-slate-500 group-hover:bg-orange-100 group-hover:text-orange-600 transition-colors">
                                     <User size={20} />
                                 </div>
                                 <div>

@@ -17,7 +17,6 @@ export interface Vehicle {
   productCount: number;
   status: VehicleStatus;
   tripCount: number;
-  isUnplanned?: boolean;
 }
 
 export interface Ramp {

@@ -21,14 +21,14 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats, isLoggedIn 
         value: stats.totalVehicles, 
         sub: 'Bugün', 
         icon: Truck, 
-        color: 'blue' 
+        color: 'orange' 
     },
     { 
         label: 'Ort. İşlem Süresi', 
         value: `${stats.avgTurnaroundMinutes} dk`, 
         sub: 'Rampa - Çıkış', 
         icon: Timer, 
-        color: 'indigo',
+        color: 'slate',
         requiresLogin: true
     },
     { 

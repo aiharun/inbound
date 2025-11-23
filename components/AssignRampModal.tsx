@@ -47,14 +47,14 @@ export const AssignRampModal: React.FC<AssignRampModalProps> = ({ isOpen, onClos
                 ) : (
                     <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                          {freeRamps.map(ramp => (
-                            <label key={ramp.id} className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedRampId === ramp.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                            <label key={ramp.id} className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedRampId === ramp.id ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:border-slate-300'}`}>
                                 <input 
                                     type="radio" 
                                     name="ramp" 
                                     value={ramp.id}
                                     checked={selectedRampId === ramp.id}
                                     onChange={(e) => setSelectedRampId(e.target.value)}
-                                    className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                    className="w-4 h-4 text-orange-600 focus:ring-orange-500 border-gray-300"
                                 />
                                 <span className="ml-3 font-medium text-slate-700">{ramp.name}</span>
                                 <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">MÜSAİT</span>
@@ -74,7 +74,7 @@ export const AssignRampModal: React.FC<AssignRampModalProps> = ({ isOpen, onClos
                  <button
                     onClick={() => onConfirm(selectedRampId)}
                     disabled={freeRamps.length === 0 || !selectedRampId}
-                    className="flex-1 px-4 py-3 text-white font-bold bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-3 text-white font-bold bg-orange-600 hover:bg-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                  >
                     Rampaya Ata <ArrowRight size={18} />
                  </button>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Truck, Package, Anchor, ChevronDown, AlertCircle, User, Phone } from 'lucide-react';
+import { X, Truck, Package, Anchor, ChevronDown, AlertCircle } from 'lucide-react';
 import { Ramp, Vehicle } from '../types';
 
 interface AddVehicleModalProps {
@@ -12,7 +12,6 @@ interface AddVehicleModalProps {
   onAddPlate: (plate: string) => void;
   initialPlate?: string;
   initialProductCount?: number | null;
-  allRegisteredPlates?: string[];
 }
 
 export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ 
@@ -21,19 +20,12 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
     onSubmit, 
     ramps, 
     availablePlates,
-    onAddPlate,
     initialPlate = '',
-    initialProductCount = null,
-    allRegisteredPlates = []
+    initialProductCount = null
 }) => {
   const [licensePlate, setLicensePlate] = useState('');
   const [productCount, setProductCount] = useState<string>('');
   const [selectedRampId, setSelectedRampId] = useState<string>('');
-  
-  // New fields for driver info
-  const [driverName, setDriverName] = useState('');
-  const [driverPhone, setDriverPhone] = useState('');
-  
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -41,45 +33,11 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
         setLicensePlate(initialPlate || '');
         setProductCount(initialProductCount !== null ? initialProductCount.toString() : '');
         setSelectedRampId('');
-        setDriverName('');
-        setDriverPhone('');
         setError('');
     }
   }, [isOpen, initialPlate, initialProductCount]);
 
   if (!isOpen) return null;
-
-  // Turkish License Plate Regex: 
-  // Starts with 01-81, followed by 1-3 letters, followed by 2-5 digits
-  const TURKISH_PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])\s*[A-Z]{1,3}\s*\d{2,5}$/;
-
-  const formatPhoneNumber = (value: string) => {
-    // Strip all non-numeric characters
-    const numbers = value.replace(/\D/g, '');
-    
-    // Ensure it starts with 0
-    let formatted = numbers;
-    if (numbers.length > 0 && numbers[0] !== '0') {
-        formatted = '0' + numbers;
-    }
-    
-    // Limit to 11 digits (05XX XXX XX XX)
-    formatted = formatted.slice(0, 11);
-
-    // Apply formatting
-    if (formatted.length > 7) {
-        return `${formatted.slice(0, 4)} ${formatted.slice(4, 7)} ${formatted.slice(7, 9)} ${formatted.slice(9)}`;
-    } else if (formatted.length > 4) {
-        return `${formatted.slice(0, 4)} ${formatted.slice(4)}`;
-    } else {
-        return formatted;
-    }
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(e.target.value);
-    setDriverPhone(formatted);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,56 +45,16 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
 
     const normalizedPlate = licensePlate.toUpperCase().trim();
 
-    // --- VALIDATION START ---
-
-    // 1. Check duplicate for unplanned vehicles
-    if (!initialPlate) {
-        // Remove ALL spaces from input for comparison
-        const inputStripped = normalizedPlate.replace(/\s/g, '');
-        
-        const isDuplicate = allRegisteredPlates.some(regPlate => 
-            regPlate.toUpperCase().replace(/\s/g, '') === inputStripped
-        );
-
-        if (isDuplicate) {
-            setError('Bu araç zaten sistemde kayıtlıdır. Lütfen sefer planlayın.');
-            return;
-        }
-
-        // 2. Validate Turkish Plate Format
-        if (!TURKISH_PLATE_REGEX.test(normalizedPlate)) {
-            setError('Geçersiz plaka formatı! Örn: 34 ABC 123');
-            return;
-        }
-
-        // 3. Validate Driver Info for Extra Vehicles
-        if (!driverName.trim()) {
-            setError('Lütfen sürücü adını giriniz.');
-            return;
-        }
-
-        if (driverPhone.replace(/\s/g, '').length < 11) {
-            setError('Lütfen geçerli bir telefon numarası giriniz (05XX...)');
-            return;
-        }
-    }
-
-    // --- VALIDATION END ---
-
     onSubmit({
       licensePlate: normalizedPlate,
       productCount: parseInt(productCount),
-      rampId: selectedRampId || null,
-      driverName: !initialPlate ? driverName : undefined,
-      driverPhone: !initialPlate ? driverPhone : undefined
+      rampId: selectedRampId || null
     });
     
     // Reset form
     setLicensePlate('');
     setProductCount('');
     setSelectedRampId('');
-    setDriverName('');
-    setDriverPhone('');
     setError('');
     onClose();
   };
@@ -163,7 +81,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 m-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-slate-800">{initialPlate ? 'Araç Kabul & Rampa' : 'Ekstra Araç Girişi'}</h2>
+          <h2 className="text-xl font-bold text-slate-800">{initialPlate ? 'Araç Kabul & Rampa' : 'Araç Girişi'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition">
             <X size={20} />
           </button>
@@ -185,7 +103,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                     }}
                     placeholder="34 ABC 123"
                     disabled={!!initialPlate}
-                    className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono uppercase transition-all ${initialPlate ? 'opacity-75 cursor-not-allowed bg-slate-100 font-bold text-slate-700' : ''} ${error && error.includes('plaka') ? 'border-red-300 ring-2 ring-red-100' : ''}`}
+                    className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none font-mono uppercase transition-all ${initialPlate ? 'opacity-75 cursor-not-allowed bg-slate-100 font-bold text-slate-700' : ''} ${error && error.includes('plaka') ? 'border-red-300 ring-2 ring-red-100' : ''}`}
                     autoFocus={!initialPlate}
                     maxLength={12}
                 />
@@ -197,9 +115,6 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                     </datalist>
                 )}
             </div>
-            {!initialPlate && (
-                <p className="text-[10px] text-slate-400 mt-1 ml-1">Format: 06 ANK 06 (İl Kodu + Harf + Rakam)</p>
-            )}
             
             {/* Quick Select Chips - Hide if plate is locked */}
             {!initialPlate && availablePlates.length > 0 && (
@@ -213,7 +128,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                                 key={plate}
                                 type="button"
                                 onClick={() => handleSelectPlate(plate)}
-                                className="text-xs font-mono bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-200 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                                className="text-xs font-mono bg-slate-100 hover:bg-orange-50 text-slate-600 hover:text-orange-600 border border-slate-200 hover:border-orange-200 px-2 py-1 rounded transition-colors flex items-center gap-1"
                             >
                                 {plate}
                             </button>
@@ -222,39 +137,6 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                 </div>
             )}
           </div>
-
-          {/* Driver Info - Only show for Extra Vehicles (unlocked plate) */}
-          {!initialPlate && (
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Sürücü Adı</label>
-                    <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input
-                            type="text"
-                            value={driverName}
-                            onChange={(e) => setDriverName(e.target.value)}
-                            placeholder="Ad Soyad"
-                            className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
-                        />
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Telefon</label>
-                    <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input
-                            type="text"
-                            value={driverPhone}
-                            onChange={handlePhoneChange}
-                            placeholder="05XX..."
-                            maxLength={14}
-                            className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all font-mono"
-                        />
-                    </div>
-                </div>
-            </div>
-          )}
 
           {/* Product Count */}
           <div>
@@ -266,7 +148,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                   value={productCount}
                   onChange={(e) => setProductCount(e.target.value)}
                   placeholder="0"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
                   autoFocus={!!initialPlate}
               />
               </div>
@@ -280,7 +162,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
                <select
                  value={selectedRampId}
                  onChange={(e) => setSelectedRampId(e.target.value)}
-                 className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer text-slate-700"
+                 className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all appearance-none cursor-pointer text-slate-700"
                >
                  <option value="">Rampasız Giriş (Sadece Kayıt)</option>
                  {freeRamps.map(ramp => (
@@ -310,7 +192,7 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 text-white font-bold bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-200 transition-all transform active:scale-95"
+              className="flex-1 px-4 py-3 text-white font-bold bg-orange-600 hover:bg-orange-700 rounded-xl shadow-lg shadow-orange-200 transition-all transform active:scale-95"
             >
               {getButtonText()}
             </button>

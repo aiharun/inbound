@@ -13,7 +13,8 @@ import { UserManagementModal } from './components/UserManagementModal';
 import { StatsOverview } from './components/StatsOverview';
 import { AddNoteModal } from './components/AddNoteModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, Plus, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Trash2, Users } from 'lucide-react';
+import { PlannedTripsEditorModal } from './components/PlannedTripsEditorModal';
+import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
 import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured } from './services/firebase';
@@ -49,8 +50,6 @@ const App: React.FC = () => {
   const [drivers, setDrivers] = useState<Record<string, DriverInfo>>(() => getStoredState('dockflow_drivers', DRIVER_REGISTRY));
   const [scheduledTrips, setScheduledTrips] = useState<Record<string, number>>(() => getStoredState('dockflow_trips', {}));
   const [canceledTrips, setCanceledTrips] = useState<Record<string, number>>(() => getStoredState('dockflow_canceled', {}));
-  // New state to track which canceled trips were extra/unplanned
-  const [canceledExtraPlates, setCanceledExtraPlates] = useState<string[]>(() => getStoredState('dockflow_canceled_extras', []));
   const [vehicleNotes, setVehicleNotes] = useState<Record<string, string>>(() => getStoredState('dockflow_notes', {}));
   
   // User Management State
@@ -73,6 +72,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+  const [isPlannedTripsEditorOpen, setIsPlannedTripsEditorOpen] = useState(false);
   const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
   const [isEndDayConfirmOpen, setIsEndDayConfirmOpen] = useState(false);
   
@@ -113,7 +113,6 @@ const App: React.FC = () => {
             if (data.drivers) setDrivers(data.drivers);
             if (data.scheduledTrips) setScheduledTrips(data.scheduledTrips);
             if (data.canceledTrips) setCanceledTrips(data.canceledTrips);
-            if (data.canceledExtraPlates) setCanceledExtraPlates(data.canceledExtraPlates);
             if (data.vehicleNotes) setVehicleNotes(data.vehicleNotes);
             if (data.users) setUsers(data.users);
             if (data.activeSessions) setActiveSessions(data.activeSessions);
@@ -127,7 +126,6 @@ const App: React.FC = () => {
                 drivers,
                 scheduledTrips,
                 canceledTrips,
-                canceledExtraPlates,
                 vehicleNotes,
                 users,
                 activeSessions
@@ -146,7 +144,6 @@ const App: React.FC = () => {
   useEffect(() => { window.localStorage.setItem('dockflow_drivers', JSON.stringify(drivers)); }, [drivers]);
   useEffect(() => { window.localStorage.setItem('dockflow_trips', JSON.stringify(scheduledTrips)); }, [scheduledTrips]);
   useEffect(() => { window.localStorage.setItem('dockflow_canceled', JSON.stringify(canceledTrips)); }, [canceledTrips]);
-  useEffect(() => { window.localStorage.setItem('dockflow_canceled_extras', JSON.stringify(canceledExtraPlates)); }, [canceledExtraPlates]);
   useEffect(() => { window.localStorage.setItem('dockflow_notes', JSON.stringify(vehicleNotes)); }, [vehicleNotes]);
   useEffect(() => { window.localStorage.setItem('dockflow_users_list', JSON.stringify(users)); }, [users]);
   useEffect(() => { window.localStorage.setItem('dockflow_sessions', JSON.stringify(activeSessions)); }, [activeSessions]);
@@ -197,14 +194,6 @@ const App: React.FC = () => {
     return new Set(vehicles.filter(v => v.status !== VehicleStatus.COMPLETED && v.status !== VehicleStatus.CANCELED).map(v => v.licensePlate));
   }, [vehicles]);
 
-  const platesForUnplannedModal = useMemo(() => {
-    return availablePlates.filter(plate => {
-        const remaining = allRemainingTrips[plate] || 0;
-        const isActive = activePlates.has(plate);
-        return remaining <= 0 && !isActive;
-    });
-  }, [availablePlates, allRemainingTrips, activePlates]);
-
   const logVehicles = useMemo(() => {
     return vehicles.filter(v => v.status !== VehicleStatus.INCOMING);
   }, [vehicles]);
@@ -239,8 +228,7 @@ const App: React.FC = () => {
         ? Math.floor((totalDuration / completedCountWithDuration) / 60000) 
         : 0;
 
-    // Filter out canceled extra vehicles from the statistic count
-    const canceledCount = Object.keys(canceledTrips).filter(plate => !canceledExtraPlates.includes(plate)).length;
+    const canceledCount = Object.keys(canceledTrips).length;
     const waitingCount = Object.values(allRemainingTrips).reduce((total: number, count: number) => total + count, 0);
 
     return {
@@ -250,7 +238,7 @@ const App: React.FC = () => {
         canceledCount,
         waitingCount: waitingCount
     };
-  }, [vehicles, ramps, allRemainingTrips, canceledTrips, canceledExtraPlates]);
+  }, [vehicles, ramps, allRemainingTrips, canceledTrips]);
 
   // Handlers
   const handleLogin = (user: User) => {
@@ -303,7 +291,6 @@ const App: React.FC = () => {
     const newRamps = createInitialRamps();
     const newScheduled = {};
     const newCanceled = {};
-    const newCanceledExtras: string[] = [];
     const newNotes = {};
     const newAvailablePlates = masterPlates;
 
@@ -312,7 +299,6 @@ const App: React.FC = () => {
     setRamps(newRamps);
     setScheduledTrips(newScheduled);
     setCanceledTrips(newCanceled);
-    setCanceledExtraPlates(newCanceledExtras);
     setVehicleNotes(newNotes);
     setAvailablePlates(newAvailablePlates);
 
@@ -323,7 +309,6 @@ const App: React.FC = () => {
             ramps: newRamps,
             scheduledTrips: newScheduled,
             canceledTrips: newCanceled,
-            canceledExtraPlates: newCanceledExtras,
             vehicleNotes: newNotes,
             availablePlates: newAvailablePlates,
             drivers, // Keep drivers
@@ -352,13 +337,6 @@ const App: React.FC = () => {
         newCanceled = canceledTrips; // No change
     }
 
-    // Also clear from extra plates if restored via adding trips
-    let newCanceledExtras = canceledExtraPlates;
-    if (canceledExtraPlates.includes(plate)) {
-        newCanceledExtras = canceledExtraPlates.filter(p => p !== plate);
-        setCanceledExtraPlates(newCanceledExtras);
-    }
-
     let newAvailable = availablePlates;
     if (!availablePlates.includes(plate)) {
         newAvailable = [plate, ...availablePlates];
@@ -368,8 +346,83 @@ const App: React.FC = () => {
     pushUpdate({ 
         scheduledTrips: newScheduled, 
         canceledTrips: newCanceled, 
-        canceledExtraPlates: newCanceledExtras,
         availablePlates: newAvailable 
+    });
+  };
+
+  const handleBatchUpdateScheduledTrips = (
+      updates: Record<string, number>, 
+      newDriverData?: Record<string, DriverInfo>,
+      deletedPlates?: string[]
+  ) => {
+    // 1. Handle Deletions first
+    let finalAvailablePlates = [...availablePlates];
+    let finalDrivers = { ...drivers };
+    let finalScheduledTrips = { ...scheduledTrips };
+    let finalNotes = { ...vehicleNotes };
+
+    if (deletedPlates && deletedPlates.length > 0) {
+        const deletedSet = new Set(deletedPlates);
+        
+        finalAvailablePlates = finalAvailablePlates.filter(p => !deletedSet.has(p));
+        
+        deletedPlates.forEach(p => {
+            delete finalDrivers[p];
+            delete finalScheduledTrips[p];
+            delete finalNotes[p];
+        });
+    }
+
+    // 2. Merge Updates (Trips)
+    // Filter out updates for deleted plates just in case
+    const validUpdates: Record<string, number> = {};
+    Object.keys(updates).forEach(key => {
+        if (!deletedPlates?.includes(key)) {
+            validUpdates[key] = updates[key];
+        }
+    });
+    
+    finalScheduledTrips = { ...finalScheduledTrips, ...validUpdates };
+    
+    // 3. Handle Restorations (Cancel -> Active)
+    const platesToRestore = Object.keys(validUpdates).filter(plate => validUpdates[plate] > 0);
+    const newCanceled = { ...canceledTrips };
+    platesToRestore.forEach(plate => {
+        if (newCanceled[plate]) delete newCanceled[plate];
+    });
+
+    // 4. Add new plates
+    const newPlates = Object.keys(validUpdates);
+    newPlates.forEach(plate => {
+        if (!finalAvailablePlates.includes(plate)) finalAvailablePlates.push(plate);
+    });
+
+    // 5. Handle New Drivers
+    if (newDriverData && Object.keys(newDriverData).length > 0) {
+        // Only add if not deleted
+        const validNewDrivers: Record<string, DriverInfo> = {};
+        Object.keys(newDriverData).forEach(key => {
+            if (!deletedPlates?.includes(key)) {
+                validNewDrivers[key] = newDriverData[key];
+            }
+        });
+        finalDrivers = { ...finalDrivers, ...validNewDrivers };
+    }
+
+    // Update State
+    setScheduledTrips(finalScheduledTrips);
+    setCanceledTrips(newCanceled);
+    setAvailablePlates(finalAvailablePlates);
+    setDrivers(finalDrivers);
+    setVehicleNotes(finalNotes);
+    
+    // Push Update
+    pushUpdate({
+        scheduledTrips: finalScheduledTrips,
+        canceledTrips: newCanceled,
+        availablePlates: finalAvailablePlates,
+        drivers: finalDrivers,
+        vehicleNotes: finalNotes
     });
   };
 
@@ -395,18 +448,10 @@ const App: React.FC = () => {
   const performCancelTrip = (plate: string) => {
     const currentCount = allRemainingTrips[plate];
     if (currentCount > 0) {
-        // Identify if this is an "Extra" (Unplanned) vehicle being canceled
-        const isUnplanned = vehicles.some(v => v.licensePlate === plate && v.isUnplanned);
         
         const newCanceled = { ...canceledTrips, [plate]: currentCount };
         setCanceledTrips(newCanceled);
 
-        let newCanceledExtras = canceledExtraPlates;
-        if (isUnplanned) {
-            newCanceledExtras = [...canceledExtraPlates, plate];
-            setCanceledExtraPlates(newCanceledExtras);
-        }
-        
         // Update vehicles logic:
         // 1. Remove INCOMING vehicles (haven't arrived yet).
         // 2. Remove WAITING vehicles (removed from list entirely).
@@ -425,7 +470,6 @@ const App: React.FC = () => {
 
         pushUpdate({ 
             canceledTrips: newCanceled, 
-            canceledExtraPlates: newCanceledExtras,
             vehicles: newVehicles 
         });
     }
@@ -542,13 +586,8 @@ const App: React.FC = () => {
     delete newCanceled[plate];
     setCanceledTrips(newCanceled);
 
-    // Also remove from extra plates tracking
-    const newCanceledExtras = canceledExtraPlates.filter(p => p !== plate);
-    setCanceledExtraPlates(newCanceledExtras);
-
     pushUpdate({ 
-        canceledTrips: newCanceled,
-        canceledExtraPlates: newCanceledExtras
+        canceledTrips: newCanceled
     });
   };
 
@@ -563,9 +602,6 @@ const App: React.FC = () => {
     const previousTrips = vehicles.filter(v => v.licensePlate === data.licensePlate).length;
     const currentTripCount = previousTrips + 1;
 
-    const remainingPlanned = allRemainingTrips[data.licensePlate] || 0;
-    const isUnplanned = remainingPlanned <= 0;
-
     const newVehicle: Vehicle = {
       id: newVehicleId,
       licensePlate: data.licensePlate,
@@ -574,8 +610,7 @@ const App: React.FC = () => {
       status: data.rampId ? VehicleStatus.DOCKING : VehicleStatus.WAITING,
       rampId: data.rampId,
       dockingStartTime: data.rampId ? new Date().toISOString() : undefined,
-      tripCount: currentTripCount,
-      isUnplanned: isUnplanned
+      tripCount: currentTripCount
     };
     
     // Filter out incoming entry if exists
@@ -618,22 +653,11 @@ const App: React.FC = () => {
         setAvailablePlates(newAvailable);
     }
     
-    // Update drivers registry if new info is provided
-    let newDrivers = drivers;
-    if (data.driverName && data.driverPhone) {
-        newDrivers = {
-            ...drivers,
-            [data.licensePlate]: { name: data.driverName, phone: data.driverPhone }
-        };
-        setDrivers(newDrivers);
-    }
-
     pushUpdate({ 
         vehicles: newVehicles, 
         ramps: newRamps, 
         scheduledTrips: newScheduled, 
-        availablePlates: newAvailable, 
-        drivers: newDrivers
+        availablePlates: newAvailable
     });
   };
 
@@ -658,7 +682,6 @@ const App: React.FC = () => {
   const handleConfirmAssignment = (rampId: string) => {
     if (!assigningVehicleId) return;
 
-    const vehicle = vehicles.find(v => v.id === assigningVehicleId);
     let newScheduled = scheduledTrips;
 
     // NOTE: We do NOT decrement scheduledTrips here because it was already decremented
@@ -700,11 +723,11 @@ const App: React.FC = () => {
       <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
+            <div className="bg-orange-600 p-2 rounded-lg">
                 <LayoutDashboard className="text-white w-6 h-6" />
             </div>
             <div>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">DockFlow <span className="text-blue-600">Lojistik</span></h1>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Ayazağa <span className="text-orange-600">Inbound</span></h1>
                 <div className="flex items-center gap-2">
                     {!isLoggedIn && <span className="text-xs text-slate-400 font-medium">Misafir Görünümü</span>}
                     {isFirebaseConfigured() ? (
@@ -762,7 +785,7 @@ const App: React.FC = () => {
             ) : (
                 <button 
                     onClick={() => setIsLoginModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-bold shadow-lg shadow-blue-200"
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors text-sm font-bold shadow-lg shadow-orange-200"
                 >
                     <LogIn size={18} />
                     <span>Personel Girişi</span>
@@ -775,7 +798,7 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {/* Operation Complete Banner */}
         {isLoggedIn && isDayComplete && (
-          <div className="mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-emerald-100 relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="mb-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-orange-100 relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
             <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black opacity-5 rounded-full blur-2xl"></div>
             
@@ -786,7 +809,7 @@ const App: React.FC = () => {
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-white mb-1">Tüm Operasyonlar Tamamlandı</h2>
-                        <p className="text-emerald-50 text-sm md:text-base opacity-90">
+                        <p className="text-orange-50 text-sm md:text-base opacity-90">
                             Sırada bekleyen veya işlem gören araç bulunmamaktadır. Sistemi bir sonraki gün için sıfırlayabilirsiniz.
                         </p>
                     </div>
@@ -794,7 +817,7 @@ const App: React.FC = () => {
 
                 <button 
                     onClick={() => setIsEndDayConfirmOpen(true)}
-                    className="flex-shrink-0 flex items-center gap-3 px-6 py-3.5 bg-white text-emerald-700 rounded-xl hover:bg-emerald-50 transition-all font-bold text-sm md:text-base shadow-lg group whitespace-nowrap"
+                    className="flex-shrink-0 flex items-center gap-3 px-6 py-3.5 bg-white text-orange-700 rounded-xl hover:bg-orange-50 transition-all font-bold text-sm md:text-base shadow-lg group whitespace-nowrap"
                 >
                     <RotateCcw className="group-hover:-rotate-180 transition-transform duration-700" size={20} />
                     Sistemi Sıfırla (Yeni Gün)
@@ -817,17 +840,6 @@ const App: React.FC = () => {
                 >
                     <StickyNote size={16} />
                     Not Ekle
-                </button>
-                <button 
-                    onClick={() => {
-                        setTargetPlate('');
-                        setTargetProductCount(null);
-                        setIsModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold text-sm shadow-md shadow-blue-200"
-                >
-                    <Plus size={16} />
-                    Ekstra Araç
                 </button>
                 <button 
                     onClick={() => setIsDriverModalOpen(true)}
@@ -885,7 +897,6 @@ const App: React.FC = () => {
             <PlannedTripsList 
                 scheduledTrips={allRemainingTrips}
                 canceledTrips={canceledTrips}
-                canceledExtraPlates={canceledExtraPlates}
                 drivers={drivers}
                 vehicleNotes={vehicleNotes}
                 onAssign={handleAssignFromPlanned}
@@ -894,6 +905,7 @@ const App: React.FC = () => {
                 onRestore={handleRestoreTrip}
                 readOnly={!isLoggedIn}
                 vehicles={vehicles}
+                onOpenEditor={() => setIsPlannedTripsEditorOpen(true)}
             />
         </div>
       </main>
@@ -913,11 +925,10 @@ const App: React.FC = () => {
                 onSubmit={handleAddVehicle}
                 ramps={ramps}
                 currentVehicles={vehicles}
-                availablePlates={targetPlate ? availablePlates : platesForUnplannedModal}
+                availablePlates={availablePlates}
                 onAddPlate={handleAddPlateToData}
                 initialPlate={targetPlate}
                 initialProductCount={targetProductCount}
-                allRegisteredPlates={availablePlates}
             />
 
             <AddTripModal
@@ -932,6 +943,15 @@ const App: React.FC = () => {
                 onClose={() => setIsNoteModalOpen(false)}
                 onSave={handleAddNote}
                 availablePlates={availablePlates}
+            />
+
+            <PlannedTripsEditorModal
+                isOpen={isPlannedTripsEditorOpen}
+                onClose={() => setIsPlannedTripsEditorOpen(false)}
+                drivers={drivers}
+                availablePlates={availablePlates}
+                scheduledTrips={scheduledTrips}
+                onSave={handleBatchUpdateScheduledTrips}
             />
 
             <AssignRampModal
@@ -953,6 +973,7 @@ const App: React.FC = () => {
                 drivers={drivers}
                 onUpdateDriver={handleUpdateDriver}
                 availablePlates={availablePlates}
+                onSystemReset={() => setIsEndDayConfirmOpen(true)}
             />
 
             {isAdmin && currentUser && (
