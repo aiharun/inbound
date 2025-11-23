@@ -74,9 +74,6 @@ const App: React.FC = () => {
   // Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [lastReadChatTime, setLastReadChatTime] = useState<string>(() => 
-    getStoredState('dockflow_chat_last_read', new Date().toISOString())
-  );
   
   // Sync State
   const [isSynced, setIsSynced] = useState(false);
@@ -201,32 +198,6 @@ const App: React.FC = () => {
           return () => unsubscribeChat();
       }
   }, [isLoggedIn]);
-
-  // UNREAD CHAT COUNT LOGIC
-  const unreadChatCount = useMemo(() => {
-    if (isChatOpen || !chatMessages.length) return 0;
-    
-    // Count messages that are newer than lastReadChatTime and NOT sent by current user
-    return chatMessages.filter(m => 
-        m.senderUsername !== currentUser?.username && 
-        new Date(m.timestamp).getTime() > new Date(lastReadChatTime).getTime()
-    ).length;
-  }, [chatMessages, lastReadChatTime, isChatOpen, currentUser]);
-
-  // Update Last Read Time when Chat Opens or New Message arrives while open
-  useEffect(() => {
-    if (isChatOpen && chatMessages.length > 0) {
-        // Find the most recent timestamp
-        const latestTimestamp = chatMessages[chatMessages.length - 1].timestamp;
-        
-        // Only update if it's newer than what we have
-        if (new Date(latestTimestamp).getTime() > new Date(lastReadChatTime).getTime()) {
-            setLastReadChatTime(latestTimestamp);
-            window.localStorage.setItem('dockflow_chat_last_read', JSON.stringify(latestTimestamp));
-        }
-    }
-  }, [isChatOpen, chatMessages, lastReadChatTime]);
-
 
   // Local Persistence Fallback (Always update local storage as backup)
   useEffect(() => { window.localStorage.setItem('dockflow_ramps', JSON.stringify(ramps)); }, [ramps]);
@@ -1244,15 +1215,10 @@ const App: React.FC = () => {
             {!isChatOpen && (
               <button
                 onClick={() => setIsChatOpen(true)}
-                className="fixed bottom-6 right-6 z-40 p-4 bg-orange-600 text-white rounded-full shadow-2xl hover:bg-orange-700 hover:scale-105 transition-all flex items-center justify-center group relative"
+                className="fixed bottom-6 right-6 z-40 p-4 bg-orange-600 text-white rounded-full shadow-2xl hover:bg-orange-700 hover:scale-105 transition-all flex items-center justify-center group"
                 title="Ekip Sohbeti"
               >
                 <MessageSquare size={24} className="group-hover:animate-bounce" />
-                {unreadChatCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-pulse">
-                        {unreadChatCount > 9 ? '9+' : unreadChatCount}
-                    </span>
-                )}
               </button>
             )}
 
