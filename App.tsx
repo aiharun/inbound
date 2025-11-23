@@ -170,23 +170,35 @@ const App: React.FC = () => {
     }
   }, [currentSessionId]);
 
-  // SINGLE SESSION ENFORCEMENT
+  // SECURITY ENFORCEMENT: Account Deletion & Single Session
   useEffect(() => {
-    if (currentUser && currentSessionId && activeSessions.length > 0) {
-        // Find the active session for the current user in the cloud data
-        const remoteSession = activeSessions.find(s => s.username === currentUser.username);
+    if (currentUser && currentSessionId) {
+        // 1. Check if the user account still exists in the system
+        const accountExists = users.some(u => u.username === currentUser.username);
         
-        // If a session exists in the cloud for this user
-        if (remoteSession) {
-            // Check if the cloud Session ID matches our local Session ID
-            if (remoteSession.sessionId !== currentSessionId) {
-                // IDs don't match, meaning a newer login occurred elsewhere.
-                alert("Hesabınıza başka bir cihazdan giriş yapıldığı için oturumunuz sonlandırıldı.");
-                handleLogout();
+        if (!accountExists) {
+            alert("Hesabınız yönetici tarafından silindiği için oturumunuz sonlandırıldı.");
+            handleLogout();
+            return;
+        }
+
+        // 2. Check for Single Session (IDs match)
+        if (activeSessions.length > 0) {
+            // Find the active session for the current user in the cloud data
+            const remoteSession = activeSessions.find(s => s.username === currentUser.username);
+            
+            // If a session exists in the cloud for this user
+            if (remoteSession) {
+                // Check if the cloud Session ID matches our local Session ID
+                if (remoteSession.sessionId !== currentSessionId) {
+                    // IDs don't match, meaning a newer login occurred elsewhere.
+                    alert("Hesabınıza başka bir cihazdan giriş yapıldığı için oturumunuz sonlandırıldı.");
+                    handleLogout();
+                }
             }
         }
     }
-  }, [activeSessions, currentUser, currentSessionId]);
+  }, [users, activeSessions, currentUser, currentSessionId]);
 
   // Helper to push updates to cloud
   const pushUpdate = (updates: any) => {
@@ -318,9 +330,16 @@ const App: React.FC = () => {
   };
 
   const handleDeleteUser = (username: string) => {
+    // 1. Remove from Users list
     const updatedUsers = users.filter(u => u.username !== username);
     setUsers(updatedUsers);
-    pushUpdate({ users: updatedUsers });
+
+    // 2. Remove from Active Sessions (Kick user out immediately)
+    const updatedSessions = activeSessions.filter(s => s.username !== username);
+    setActiveSessions(updatedSessions);
+
+    // 3. Push both updates
+    pushUpdate({ users: updatedUsers, activeSessions: updatedSessions });
   };
 
   const performEndDayReset = () => {
