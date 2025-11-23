@@ -1,14 +1,15 @@
-import { initializeApp } from "firebase/app";
-// @ts-ignore
-import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
+// src/services/firebase.ts
 
-// ------------------------------------------------------------------
-// TODO: REPLACE THIS CONFIG WITH YOUR OWN FROM FIREBASE CONSOLE
-// 1. Go to https://console.firebase.google.com/
-// 2. Create a new project
-// 3. Add a Web App
-// 4. Copy the config object below
-// ------------------------------------------------------------------
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  updateDoc 
+} from "firebase/firestore";
+
+// Senin API Anahtarların (Aynen korudum)
 const firebaseConfig = {
   apiKey: "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8",
   authDomain: "inbound-b9ab6.firebaseapp.com",
@@ -19,57 +20,55 @@ const firebaseConfig = {
   measurementId: "G-HJ8P8KLN7J"
 };
 
-let db = null;
-let docRef = null;
+// Uygulamayı başlat
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-// Attempt to initialize Firebase only if config is updated
-try {
-    if (firebaseConfig.apiKey !== "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8") {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        // Single document to store the entire warehouse state for simple sync
-        docRef = doc(db, "dockflow", "main_operation");
-        console.log("Firebase initialized successfully");
+// Verilerin tutulacağı tekil döküman referansı
+// "warehouse" koleksiyonu içinde "live_data" dökümanı
+const DATA_DOC_REF = doc(db, "warehouse", "live_data");
+
+// 1. DİNLEME FONKSİYONU (İşte sihri yapan yer burası)
+// getDoc yerine onSnapshot kullanıyoruz.
+export const subscribeToData = (onDataUpdate: (data: any) => void) => {
+  // Bu fonksiyon veritabanında bir yaprak kımıldasa çalışır
+  const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
+    if (docSnapshot.exists()) {
+      // Veri varsa React'e gönder
+      onDataUpdate(docSnapshot.data());
     } else {
-        console.warn("Firebase config is default. Real-time sync is disabled.");
+      // Veri yoksa (ilk açılışsa) boş gönder
+      onDataUpdate(null);
     }
-} catch (error) {
-    console.error("Failed to initialize Firebase:", error);
-}
+  }, (error) => {
+    console.error("Firebase dinleme hatası:", error);
+  });
 
-export const isFirebaseConfigured = () => !!db && !!docRef;
-
-export const subscribeToData = (onData: (data: any) => void) => {
-    if (!docRef) return () => {};
-    
-    console.log("Subscribing to Firestore updates...");
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            onData(docSnap.data());
-        } else {
-            // Document doesn't exist yet (fresh install)
-            onData(null);
-        }
-    }, (error) => {
-        console.error("Firestore sync error:", error);
-    });
-
-    return unsubscribe;
+  // Dinlemeyi durdurma fonksiyonunu geri döndür
+  return unsubscribe;
 };
 
-export const updateData = async (data: any) => {
-    if (!docRef) return;
-    // Merge allow us to update specific top-level fields (like vehicles array) 
-    // without overwriting others if we pass partial objects
-    try {
-        await setDoc(docRef, data, { merge: true });
-    } catch (error) {
-        console.error("Error updating data:", error);
-    }
+// 2. VERİ GÜNCELLEME FONKSİYONU
+export const updateData = async (updates: any) => {
+  try {
+    // Sadece değişen kısımları güncelle (merge)
+    await setDoc(DATA_DOC_REF, updates, { merge: true });
+  } catch (error) {
+    console.error("Veri güncelleme hatası:", error);
+  }
 };
 
-export const resetCloudData = async (data: any) => {
-    if (!docRef) return;
-    // Set without merge overwrites the entire document
-    await setDoc(docRef, data);
+// 3. VERİ SIFIRLAMA FONKSİYONU
+export const resetCloudData = async (fullData: any) => {
+  try {
+    // Tüm veriyi baştan yazar
+    await setDoc(DATA_DOC_REF, fullData);
+  } catch (error) {
+    console.error("Veri sıfırlama hatası:", error);
+  }
+};
+
+// Yardımcı fonksiyon
+export const isFirebaseConfigured = () => {
+  return !!firebaseConfig.apiKey;
 };
