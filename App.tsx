@@ -285,14 +285,15 @@ const App: React.FC = () => {
 
   const performEndDayReset = () => {
     // Manually reset all state to initial values to avoid page reload issues
-    const masterPlates = Object.keys(DRIVER_REGISTRY);
+    // RESET DRIVERS TO INITIAL FILE DATA (retrieve from drivers.ts)
+    const newDrivers = DRIVER_REGISTRY;
+    const newAvailablePlates = Object.keys(DRIVER_REGISTRY);
 
     const newVehicles = INITIAL_VEHICLES;
     const newRamps = createInitialRamps();
     const newScheduled = {};
     const newCanceled = {};
     const newNotes = {};
-    const newAvailablePlates = masterPlates;
 
     // Set States
     setVehicles(newVehicles);
@@ -301,6 +302,7 @@ const App: React.FC = () => {
     setCanceledTrips(newCanceled);
     setVehicleNotes(newNotes);
     setAvailablePlates(newAvailablePlates);
+    setDrivers(newDrivers);
 
     // Sync Reset to Cloud
     if (isFirebaseConfigured()) {
@@ -311,7 +313,7 @@ const App: React.FC = () => {
             canceledTrips: newCanceled,
             vehicleNotes: newNotes,
             availablePlates: newAvailablePlates,
-            drivers, // Keep drivers
+            drivers: newDrivers, // Reset to file data
             users, // Keep users
             activeSessions // Keep sessions
         });
@@ -338,15 +340,24 @@ const App: React.FC = () => {
     }
 
     let newAvailable = availablePlates;
+    let newDrivers = drivers;
+
     if (!availablePlates.includes(plate)) {
         newAvailable = [plate, ...availablePlates];
         setAvailablePlates(newAvailable);
+        
+        // Also ensure it exists in drivers map for Cloud sync (Plates Collection)
+        if (!newDrivers[plate]) {
+            newDrivers = { ...drivers, [plate]: { name: '', phone: '' } };
+            setDrivers(newDrivers);
+        }
     }
 
     pushUpdate({ 
         scheduledTrips: newScheduled, 
         canceledTrips: newCanceled, 
-        availablePlates: newAvailable 
+        availablePlates: newAvailable,
+        drivers: newDrivers
     });
   };
 
@@ -648,16 +659,25 @@ const App: React.FC = () => {
     }
 
     let newAvailable = availablePlates;
+    let newDrivers = drivers;
+
     if (!availablePlates.includes(data.licensePlate)) {
         newAvailable = [data.licensePlate, ...availablePlates];
         setAvailablePlates(newAvailable);
+        
+        // Also ensure it exists in drivers map so it gets synced to the 'plates' collection
+        if (!newDrivers[data.licensePlate]) {
+            newDrivers = { ...drivers, [data.licensePlate]: { name: '', phone: '' } };
+            setDrivers(newDrivers);
+        }
     }
     
     pushUpdate({ 
         vehicles: newVehicles, 
         ramps: newRamps, 
         scheduledTrips: newScheduled, 
-        availablePlates: newAvailable
+        availablePlates: newAvailable,
+        drivers: newDrivers
     });
   };
 
@@ -671,7 +691,12 @@ const App: React.FC = () => {
     if (!availablePlates.includes(newPlate)) {
         const newAvailable = [newPlate, ...availablePlates];
         setAvailablePlates(newAvailable);
-        pushUpdate({ availablePlates: newAvailable });
+        
+        // Add empty driver info to ensure it exists in the 'plates' collection
+        const newDrivers = { ...drivers, [newPlate]: { name: '', phone: '' } };
+        setDrivers(newDrivers);
+
+        pushUpdate({ availablePlates: newAvailable, drivers: newDrivers });
     }
   };
 
@@ -727,9 +752,12 @@ const App: React.FC = () => {
                 <LayoutDashboard className="text-white w-6 h-6" />
             </div>
             <div>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Ayazağa <span className="text-orange-600">Inbound</span></h1>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight flex flex-col sm:flex-row sm:gap-1 leading-none sm:leading-normal">
+                    <span>Ayazağa</span>
+                    <span className="text-orange-600">Inbound</span>
+                </h1>
                 <div className="flex items-center gap-2">
-                    {!isLoggedIn && <span className="text-xs text-slate-400 font-medium">Misafir Görünümü</span>}
+                    {!isLoggedIn && <span className="hidden sm:inline text-xs text-slate-400 font-medium">Misafir Görünümü</span>}
                     {isFirebaseConfigured() ? (
                         isSynced ? (
                              <span className="flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-100">

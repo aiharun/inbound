@@ -5,11 +5,10 @@ import {
   getFirestore, 
   doc, 
   onSnapshot, 
-  setDoc, 
-  updateDoc 
+  setDoc 
 } from "firebase/firestore";
 
-// Senin API Anahtarların (Aynen korudum)
+// Senin Proje Ayarların (Aynen korundu)
 const firebaseConfig = {
   apiKey: "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8",
   authDomain: "inbound-b9ab6.firebaseapp.com",
@@ -25,50 +24,55 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Verilerin tutulacağı tekil döküman referansı
-// "warehouse" koleksiyonu içinde "live_data" dökümanı
-const DATA_DOC_REF = doc(db, "warehouse", "live_data");
+// Bu sefer senin kodundaki "dockflow" ismini kullandım ki karışıklık olmasın
+const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// 1. DİNLEME FONKSİYONU (İşte sihri yapan yer burası)
-// getDoc yerine onSnapshot kullanıyoruz.
+// 1. DİNLEME FONKSİYONU
+// Veritabanını canlı olarak izler ve React'e haber verir
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
-  // Bu fonksiyon veritabanında bir yaprak kımıldasa çalışır
+  console.log("🔥 Firebase Canlı Bağlantı Başlatılıyor...");
+  
   const unsubscribe = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
       // Veri varsa React'e gönder
-      onDataUpdate(docSnapshot.data());
+      const data = docSnapshot.data();
+      onDataUpdate(data);
     } else {
-      // Veri yoksa (ilk açılışsa) boş gönder
+      // Veri yoksa (Proje yeni açıldıysa)
+      console.log("Veri bulunamadı, başlangıç bekleniyor.");
       onDataUpdate(null);
     }
   }, (error) => {
-    console.error("Firebase dinleme hatası:", error);
+    console.error("Firebase Bağlantı Hatası:", error);
   });
 
-  // Dinlemeyi durdurma fonksiyonunu geri döndür
   return unsubscribe;
 };
 
-// 2. VERİ GÜNCELLEME FONKSİYONU
+// 2. GÜNCELLEME FONKSİYONU
+// React tarafındaki state neyse, aynısını veritabanına yazar
 export const updateData = async (updates: any) => {
   try {
-    // Sadece değişen kısımları güncelle (merge)
+    // merge: true sayesinde sadece değişen kısımları günceller
     await setDoc(DATA_DOC_REF, updates, { merge: true });
   } catch (error) {
     console.error("Veri güncelleme hatası:", error);
   }
 };
 
-// 3. VERİ SIFIRLAMA FONKSİYONU
+// 3. SIFIRLAMA FONKSİYONU
+// "Günü Bitir" dediğinde her şeyi sıfırdan yazar
 export const resetCloudData = async (fullData: any) => {
   try {
-    // Tüm veriyi baştan yazar
+    // merge kullanmıyoruz, çünkü tamamen üzerine yazıp temizlemek istiyoruz
     await setDoc(DATA_DOC_REF, fullData);
+    console.log("Veritabanı sıfırlandı.");
   } catch (error) {
     console.error("Veri sıfırlama hatası:", error);
   }
 };
 
-// Yardımcı fonksiyon
+// Yardımcı fonksiyon: App.tsx içinde kontrol için kullanılıyor
 export const isFirebaseConfigured = () => {
   return !!firebaseConfig.apiKey;
 };
