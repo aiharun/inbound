@@ -202,13 +202,14 @@ export const PlannedTripsList: React.FC<PlannedTripsListProps> = ({
                         <span className="text-sm font-bold font-mono ml-auto">
                             {latestVehicle.productCount.toLocaleString()}
                         </span>
-                        {!readOnly && onEditQuantity && !isCompleted && (
+                        {!readOnly && onEditQuantity && (
                             <button
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    // Pass true for hideSacks if vehicle is waiting
-                                    onEditQuantity(latestVehicle.id, latestVehicle.productCount, latestVehicle.incomingSackCount || 0, latestVehicle.outgoingSackCount || 0, isWaiting);
+                                    // Pass true for hideSacks if vehicle is waiting OR docking (only allow sack edit for completed)
+                                    const shouldHideSacks = isWaiting || isDocking;
+                                    onEditQuantity(latestVehicle.id, latestVehicle.productCount, latestVehicle.incomingSackCount || 0, latestVehicle.outgoingSackCount || 0, shouldHideSacks);
                                 }}
                                 className={`ml-2 p-1.5 text-slate-500 hover:text-orange-600 bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-200 rounded-md transition-all shadow-sm opacity-100`}
                                 title="Adet Düzenle"
