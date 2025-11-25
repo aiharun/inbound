@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog, DailyArchive, ChatSettings } from './types';
+import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog, DailyArchive } from './types';
 import { RampCard } from './components/RampCard';
 import { VehicleList } from './components/VehicleList';
 import { PlannedTripsList } from './components/PlannedTripsList';
@@ -23,7 +24,7 @@ import { ArchiveListModal } from './components/ArchiveListModal';
 import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock, Archive, Eye } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
-import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById, subscribeToChatSettings, saveChatSettings, deleteOldChatMessages } from './services/firebase';
+import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById, clearAllChatMessages } from './services/firebase';
 
 // Initial State Generator
 const createInitialRamps = (): Ramp[] => Array.from({ length: 5 }, (_, i) => ({
@@ -77,7 +78,6 @@ const App: React.FC = () => {
   const [lastReadChatTime, setLastReadChatTime] = useState<string>(() => 
     getStoredState('dockflow_chat_last_read', new Date().toISOString())
   );
-  const [chatSettings, setChatSettings] = useState<ChatSettings>({ retentionSeconds: 0, updatedAt: '', updatedBy: '' });
   
   // Sync State
   const [isSynced, setIsSynced] = useState(false);
@@ -221,47 +221,18 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [isArchiveMode]);
 
-  // CHAT & SETTINGS SUBSCRIPTION
+  // CHAT SUBSCRIPTION
   useEffect(() => {
       if (isLoggedIn && isFirebaseConfigured() && !isArchiveMode) {
           const unsubscribeChat = subscribeToChat((msgs) => {
               setChatMessages(msgs);
           });
           
-          const unsubscribeSettings = subscribeToChatSettings((settings) => {
-              if (settings) setChatSettings(settings);
-          });
-
           return () => {
               unsubscribeChat();
-              unsubscribeSettings();
           }
       }
   }, [isLoggedIn, isArchiveMode]);
-
-  // CHAT AUTO-CLEANUP LOGIC (ADMIN ONLY)
-  useEffect(() => {
-      // Only Admin performs cleanup, and only if retention is enabled (> 0)
-      if (isAdmin && chatSettings.retentionSeconds > 0 && isFirebaseConfigured() && !isArchiveMode) {
-          const cleanupInterval = setInterval(async () => {
-              const deletedCount = await deleteOldChatMessages(chatSettings.retentionSeconds);
-              
-              if (deletedCount > 0) {
-                  // If messages were deleted, insert a System Message to notify users
-                  sendChatMessage({
-                      senderUsername: 'SYSTEM',
-                      senderName: 'Sistem',
-                      content: 'Sohbet geçmişi otomatik temizlendi.',
-                      timestamp: new Date().toISOString(),
-                      isSystemMessage: true
-                  });
-                  handleLogAction('CHAT_CLEANUP', `${deletedCount} adet eski sohbet mesajı otomatik silindi.`);
-              }
-          }, 5000); // Check every 5 seconds for more responsive cleanup
-
-          return () => clearInterval(cleanupInterval);
-      }
-  }, [isAdmin, chatSettings.retentionSeconds, isArchiveMode]);
 
   // UNREAD CHAT COUNT LOGIC
   const unreadChatCount = useMemo(() => {
@@ -549,17 +520,11 @@ const App: React.FC = () => {
     sendChatMessage(message);
   };
 
-  const handleSaveChatSettings = (seconds: number) => {
-      if (!isAdmin || isArchiveMode) return;
+  const handleClearChatHistory = async () => {
+      if (!isAdmin || isArchiveMode || !isFirebaseConfigured()) return;
       
-      const settings: ChatSettings = {
-          retentionSeconds: seconds,
-          updatedAt: new Date().toISOString(),
-          updatedBy: currentUser?.username || 'admin'
-      };
-      
-      saveChatSettings(settings);
-      handleLogAction('UPDATE', `Sohbet geçmişi silme ayarı güncellendi: ${seconds} saniye.`);
+      await clearAllChatMessages();
+      handleLogAction('CHAT_CLEANUP', 'Sohbet geçmişi yönetici tarafından tamamen temizlendi.');
   };
 
   const performEndDayReset = async () => {
@@ -1450,7 +1415,6 @@ const App: React.FC = () => {
               messages={chatMessages}
               currentUser={currentUser!}
               onSendMessage={handleSendChatMessage}
-              retentionSeconds={chatSettings.retentionSeconds}
             />
 
             <AddVehicleModal 
@@ -1539,8 +1503,7 @@ const App: React.FC = () => {
                         onDeleteUser={handleDeleteUser}
                         currentUser={currentUser}
                         onSendMessage={handleSendAdminMessage}
-                        onSaveChatSettings={handleSaveChatSettings}
-                        currentRetentionSeconds={chatSettings.retentionSeconds}
+                        onClearChat={handleClearChatHistory}
                     />
                     <AdminLogsModal
                         isOpen={isLogsModalOpen}

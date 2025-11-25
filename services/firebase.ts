@@ -1,3 +1,4 @@
+
 // src/services/firebase.ts
 
 import { initializeApp } from "firebase/app";
@@ -280,46 +281,40 @@ export const sendChatMessage = async (message: any) => {
   await setDoc(doc(db, "chat_messages", customId), cleanData(message));
 };
 
-// -- CHAT RETENTION & CLEANUP --
+// -- CHAT CLEANUP --
 
-export const subscribeToChatSettings = (onSettings: (settings: any) => void) => {
-  if (!db) return () => {};
-  const ref = doc(db, "dockflow", "chat_config");
-  return onSnapshot(ref, (snap: any) => {
-      if(snap.exists()) {
-          onSettings(snap.data());
-      }
-  });
-}
-
-export const saveChatSettings = async (settings: any) => {
-    if (!db) return;
-    await setDoc(doc(db, "dockflow", "chat_config"), cleanData(settings));
-}
-
-export const deleteOldChatMessages = async (retentionSeconds: number) => {
+export const clearAllChatMessages = async () => {
     if (!db) return 0;
     
-    const cutoffDate = new Date(Date.now() - retentionSeconds * 1000).toISOString();
-    
-    // Query messages older than cutoff
-    // Note: This requires a composite index on timestamp if we sort, but for deletion we can just where()
-    const q = query(collection(db, "chat_messages"), where("timestamp", "<", cutoffDate));
+    // Get all messages
+    const q = query(collection(db, "chat_messages"));
     
     try {
         const snapshot = await getDocs(q);
-        const batch = writeBatch(db);
-        let count = 0;
+        const BATCH_SIZE = 500;
+        const chunks = [];
         
-        snapshot.docs.forEach((doc: any) => {
-            batch.delete(doc.ref);
-            count++;
-        });
-
-        if (count > 0) {
+        // Chunk the docs to avoid batch limit
+        for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
+            chunks.push(snapshot.docs.slice(i, i + BATCH_SIZE));
+        }
+        
+        for (const chunk of chunks) {
+            const batch = writeBatch(db);
+            chunk.forEach((doc: any) => batch.delete(doc.ref));
             await batch.commit();
         }
-        return count;
+
+        // Send System Message
+        await sendChatMessage({
+            senderUsername: 'SYSTEM',
+            senderName: 'Sistem',
+            content: 'Sohbet geçmişi yönetici tarafından temizlendi.',
+            timestamp: new Date().toISOString(),
+            isSystemMessage: true
+        });
+
+        return snapshot.size;
     } catch (e) {
         console.error("Cleanup error", e);
         return 0;

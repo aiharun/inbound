@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft, Timer, Save } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft, Trash, Save } from 'lucide-react';
 import { User as UserType, ActiveSession } from '../types';
 
 interface UserManagementModalProps {
@@ -11,8 +12,7 @@ interface UserManagementModalProps {
   onDeleteUser: (username: string) => void;
   currentUser: UserType;
   onSendMessage: (targetUsername: string, messageContent: string) => void;
-  onSaveChatSettings?: (seconds: number) => void;
-  currentRetentionSeconds?: number;
+  onClearChat?: () => void;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -24,8 +24,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   onDeleteUser,
   currentUser,
   onSendMessage,
-  onSaveChatSettings,
-  currentRetentionSeconds = 0
+  onClearChat
 }) => {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -36,23 +35,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   // Messaging State
   const [messagingUser, setMessagingUser] = useState<UserType | null>(null);
   const [messageBody, setMessageBody] = useState('');
-
-  // Chat Settings State
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(0);
-
-  useEffect(() => {
-    if (isOpen) {
-        // Convert total seconds to H:M:S
-        const h = Math.floor(currentRetentionSeconds / 3600);
-        const m = Math.floor((currentRetentionSeconds % 3600) / 60);
-        const s = currentRetentionSeconds % 60;
-        setHours(h);
-        setMinutes(m);
-        setSeconds(s);
-    }
-  }, [isOpen, currentRetentionSeconds]);
 
   if (!isOpen) return null;
 
@@ -92,11 +74,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
   };
 
-  const handleSaveChatSettings = () => {
-      if (onSaveChatSettings) {
-          const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
-          onSaveChatSettings(totalSeconds);
-      }
+  const handleClearChatSubmit = () => {
+    if (onClearChat && window.confirm("Tüm sohbet geçmişi kalıcı olarak silinecek. Emin misiniz?")) {
+        onClearChat();
+    }
   };
 
   return (
@@ -204,56 +185,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               )}
             </div>
 
-            {/* Chat Settings for Admin */}
-            {onSaveChatSettings && (
-                <div className="bg-orange-50 p-5 rounded-xl border border-orange-200">
-                    <h3 className="font-bold text-orange-800 mb-3 flex items-center gap-2">
-                        <Timer size={18} className="text-orange-600" />
-                        Sohbet Geçmişi Temizleme
+            {/* Chat Management for Admin */}
+            {onClearChat && (
+                <div className="bg-red-50 p-5 rounded-xl border border-red-200">
+                    <h3 className="font-bold text-red-800 mb-3 flex items-center gap-2">
+                        <Trash size={18} className="text-red-600" />
+                        Sohbet Yönetimi
                     </h3>
-                    <p className="text-xs text-orange-700 mb-4">
-                        Belirtilen süreden eski mesajlar otomatik olarak silinir. (0 = Devre Dışı)
+                    <p className="text-xs text-red-700 mb-4">
+                        Sohbet geçmişini manuel olarak temizleyin.
                     </p>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div>
-                            <label className="text-[10px] text-orange-600 font-bold block mb-1">SAAT</label>
-                            <input 
-                                type="number" 
-                                min="0"
-                                value={hours}
-                                onChange={(e) => setHours(parseInt(e.target.value) || 0)}
-                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-orange-600 font-bold block mb-1">DAKİKA</label>
-                            <input 
-                                type="number" 
-                                min="0" 
-                                max="59"
-                                value={minutes}
-                                onChange={(e) => setMinutes(parseInt(e.target.value) || 0)}
-                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-orange-600 font-bold block mb-1">SANİYE</label>
-                            <input 
-                                type="number" 
-                                min="0"
-                                max="59"
-                                value={seconds}
-                                onChange={(e) => setSeconds(parseInt(e.target.value) || 0)}
-                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                            />
-                        </div>
-                    </div>
                     <button 
-                        onClick={handleSaveChatSettings}
-                        className="w-full py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+                        onClick={handleClearChatSubmit}
+                        className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
-                        <Save size={14} />
-                        Süreyi Kaydet
+                        <Trash2 size={16} />
+                        Sohbet Geçmişini Sil
                     </button>
                 </div>
             )}

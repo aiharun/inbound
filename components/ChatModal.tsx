@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageSquare, User, Clock, AlertTriangle, Trash2 } from 'lucide-react';
+import { X, Send, MessageSquare, Trash2 } from 'lucide-react';
 import { ChatMessage, User as UserType } from '../types';
 
 interface ChatModalProps {
@@ -8,7 +9,6 @@ interface ChatModalProps {
   messages: ChatMessage[];
   currentUser: UserType;
   onSendMessage: (content: string) => void;
-  retentionSeconds?: number;
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({
@@ -16,8 +16,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onClose,
   messages,
   currentUser,
-  onSendMessage,
-  retentionSeconds = 0
+  onSendMessage
 }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,17 +47,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       .toUpperCase();
   };
 
-  const formatRetentionTime = (totalSeconds: number) => {
-      const h = Math.floor(totalSeconds / 3600);
-      const m = Math.floor((totalSeconds % 3600) / 60);
-      const s = totalSeconds % 60;
-      const parts = [];
-      if (h > 0) parts.push(`${h} saat`);
-      if (m > 0) parts.push(`${m} dk`);
-      if (s > 0) parts.push(`${s} sn`);
-      return parts.join(' ');
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm sm:items-end sm:justify-end sm:p-6">
       <div className="bg-white w-full h-full sm:h-[600px] sm:w-[400px] sm:rounded-2xl shadow-2xl flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-200">
@@ -80,14 +68,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <X size={20} />
           </button>
         </div>
-
-        {/* Retention Warning */}
-        {retentionSeconds > 0 && (
-            <div className="bg-orange-50 px-4 py-2 flex items-center justify-center gap-2 text-[10px] text-orange-700 font-bold border-b border-orange-100">
-                <Clock size={12} />
-                <span>Geçmiş mesajlar her {formatRetentionTime(retentionSeconds)}'de bir silinir.</span>
-            </div>
-        )}
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-slate-100 space-y-6 custom-scrollbar">
