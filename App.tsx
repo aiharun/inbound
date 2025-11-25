@@ -257,7 +257,7 @@ const App: React.FC = () => {
                   });
                   handleLogAction('CHAT_CLEANUP', `${deletedCount} adet eski sohbet mesajı otomatik silindi.`);
               }
-          }, 60000); // Check every minute
+          }, 5000); // Check every 5 seconds for more responsive cleanup
 
           return () => clearInterval(cleanupInterval);
       }
