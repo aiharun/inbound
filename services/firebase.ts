@@ -6,15 +6,18 @@ import {
   doc, 
   onSnapshot, 
   setDoc,
-  collection, // Chat ve Log için gerekli
-  addDoc,     // Chat ve Log eklemek için gerekli
-  query,      // Sıralama için gerekli
-  orderBy,    // Sıralama için gerekli
-  limit       // Son X veriyi çekmek için gerekli
+  collection, 
+  addDoc,     
+  query,      
+  orderBy,    
+  limit,
+  getDocs,    // Arşiv için gerekli
+  writeBatch, // Arşiv temizliği için gerekli
+  getDoc      // Tekil arşiv çekmek için gerekli
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// SENİN API ANAHTARLARIN (Aynen korundu)
+// API ANAHTARLARI (Aynen Korundu)
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8",
@@ -26,29 +29,26 @@ const firebaseConfig = {
   measurementId: "G-HJ8P8KLN7J"
 };
 
-// Uygulamayı başlat
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ANA VERİ REFERANSI (Araçlar, Rampalar, Sürücüler, Kullanıcılar burada duracak)
-// Tek bir döküman üzerinden çalıştığı için senkronizasyon %100 kararlıdır.
+// ANA VERİ MERKEZİ (Tek Döküman - Sorunsuz Senkronizasyon)
 const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// --- SİHİRLİ TEMİZLEYİCİ (Undefined Hatasını Çözen Kahraman) ---
-// Verinin içindeki "undefined" değerleri temizler, sistemin çökmesini engeller.
+// --- SİHİRLİ TEMİZLEYİCİ ---
+// Dosya yüklerken oluşan hatayı çözen kısım burasıdır.
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   return JSON.parse(JSON.stringify(data));
 };
 
 // ==========================================
-// 1. ANA VERİ FONKSİYONLARI (Tek Döküman - Kararlı Yapı)
+// 1. ANA OPERASYONEL VERİLER
 // ==========================================
 
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   console.log("🔥 Firebase Canlı Bağlantı Başlatıldı...");
   
-  // Ana veriyi dinle
   const unsubscribeMain = onSnapshot(DATA_DOC_REF, (docSnapshot) => {
     if (docSnapshot.exists()) {
       const data = docSnapshot.data();
@@ -67,9 +67,8 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
 
 export const updateData = async (updates: any) => {
   try {
-    // Önce veriyi temizle (undefined hatasına karşı)
+    // Dosyadan gelen veriyi temizle
     const cleanUpdates = cleanData(updates);
-    // Sonra gönder (merge: true ile sadece değişeni yazar)
     await setDoc(DATA_DOC_REF, cleanUpdates, { merge: true });
   } catch (error) {
     console.error("Veri güncelleme hatası:", error);
@@ -87,14 +86,12 @@ export const resetCloudData = async (fullData: any) => {
 };
 
 // ==========================================
-// 2. CHAT FONKSİYONLARI (App.tsx için gerekli)
+// 2. CHAT & LOG FONKSİYONLARI
 // ==========================================
 
 export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
   if (!db) return () => {};
 
-  // Mesajları tarihe göre sıralayıp son 100 tanesini getir
-  // Sildiğin koleksiyon yeni mesaj atılınca otomatik oluşacak
   const q = query(
     collection(db, "chat_messages"), 
     orderBy("timestamp", "asc"), 
@@ -124,10 +121,6 @@ export const sendChatMessage = async (message: any) => {
   }
 };
 
-// ==========================================
-// 3. LOG FONKSİYONLARI (App.tsx için gerekli)
-// ==========================================
-
 export const addSystemLog = async (log: any) => {
    if (!db) return;
    try {
@@ -137,6 +130,76 @@ export const addSystemLog = async (log: any) => {
        console.error("Log ekleme hatası:", error);
    }
 }
+
+// ==========================================
+// 3. ARŞİV FONKSİYONLARI (Senin Eklediğin Kısım)
+// ==========================================
+
+export const saveDailyArchive = async (archiveData: any) => {
+    if (!db) return;
+    
+    try {
+        const archivesRef = collection(db, "daily_archives");
+        const cleanArchive = cleanData(archiveData); // Temizleyerek kaydet
+        
+        // 1. Yeni arşivi kaydet
+        await addDoc(archivesRef, cleanArchive);
+        
+        // 2. 7 günden eski kayıtları sil (Otomatik Temizlik)
+        const q = query(archivesRef, orderBy("date", "asc"));
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.size > 7) {
+            const excess = snapshot.size - 7;
+            const docsToDelete = snapshot.docs.slice(0, excess);
+            
+            const batch = writeBatch(db);
+            docsToDelete.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            console.log(`${excess} eski arşiv kaydı silindi.`);
+        }
+        
+    } catch (error) {
+        console.error("Arşivleme hatası:", error);
+    }
+};
+
+export const getDailyArchives = async () => {
+    if (!db) return [];
+    
+    try {
+        const archivesRef = collection(db, "daily_archives");
+        const q = query(archivesRef, orderBy("date", "desc"));
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error("Arşiv çekme hatası:", error);
+        return [];
+    }
+};
+
+export const getArchiveById = async (id: string) => {
+    if (!db) return null;
+    
+    try {
+        const docRef = doc(db, "daily_archives", id);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() };
+        }
+        return null;
+    } catch (error) {
+        console.error("Tekil arşiv hatası:", error);
+        return null;
+    }
+};
 
 // Yardımcı kontrol
 export const isFirebaseConfigured = () => {

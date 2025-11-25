@@ -18,7 +18,6 @@ export interface Vehicle {
   productCount: number;
   status: VehicleStatus;
   tripCount: number;
-  isUnplanned?: boolean;
   incomingSackCount?: number; // New field: Gelen Çuval
   outgoingSackCount?: number; // New field: Giden Çuval
 }
@@ -79,4 +78,15 @@ export interface SystemLog {
   performedByName: string; // Real Name
   timestamp: string;
   metadata?: string; // Optional JSON string for extra details
+}
+
+export interface DailyArchive {
+  id: string;
+  date: string; // ISO Date String of the archive creation
+  vehicles: Vehicle[];
+  scheduledTrips: Record<string, number>;
+  canceledTrips: Record<string, number>;
+  vehicleNotes: Record<string, string>;
+  stats: WarehouseStats; // Snapshot of stats
+  closedBy: string; // Username who closed the day
 }

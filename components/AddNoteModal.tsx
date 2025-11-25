@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Truck, FileText, Save, ChevronDown } from 'lucide-react';
+import { X, Truck, FileText, Save, ChevronDown, ListOrdered } from 'lucide-react';
+import { Vehicle, VehicleStatus } from '../types';
 
 interface AddNoteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (plate: string, note: string) => void;
+  onSave: (plate: string, note: string, tripNumber: number) => void;
   availablePlates: string[];
   vehicleNotes?: Record<string, string>;
+  vehicles: Vehicle[];
+  scheduledTrips: Record<string, number>;
 }
 
 export const AddNoteModal: React.FC<AddNoteModalProps> = ({ 
@@ -14,25 +17,67 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
     onClose, 
     onSave,
     availablePlates,
-    vehicleNotes = {}
+    vehicleNotes = {},
+    vehicles,
+    scheduledTrips
 }) => {
   const [plate, setPlate] = useState('');
   const [note, setNote] = useState('');
+  const [tripNumber, setTripNumber] = useState<number>(1);
+  const [totalTrips, setTotalTrips] = useState<number>(1);
 
-  // Pre-fill note if the selected plate already has one
+  // Calculate total trips when plate changes
   useEffect(() => {
-    if (plate && vehicleNotes[plate]) {
-        setNote(vehicleNotes[plate]);
-    } else if (plate) {
-        setNote('');
+    if (plate) {
+        // 1. Count history (Processed/Active)
+        const historyCount = vehicles.filter(v => 
+            v.licensePlate === plate && 
+            v.status !== VehicleStatus.CANCELED && 
+            v.status !== VehicleStatus.INCOMING
+        ).length;
+
+        // 2. Count future (Scheduled Remaining)
+        // Default to 0 if not explicitly in scheduledTrips, but usually implicit 1 if in availablePlates
+        // However, scheduledTrips passed here is 'allRemainingTrips' from App.tsx which handles the implicit 1
+        const remainingCount = scheduledTrips[plate] || 0;
+
+        // Note: If history is 0 and remaining is 0 (unlikely if in available list), assume at least 1.
+        const total = Math.max(1, historyCount + remainingCount);
+        setTotalTrips(total);
+
+        // Reset selected trip to 1 or logic to pick next? Default to 1.
+        setTripNumber(1);
+
+        // Try to pre-fill note for Trip 1
+        const noteKey = `${plate}-1`;
+        if (vehicleNotes[noteKey]) {
+            setNote(vehicleNotes[noteKey]);
+        } else if (vehicleNotes[plate]) {
+            setNote(vehicleNotes[plate]); // Legacy fallback
+        } else {
+            setNote('');
+        }
     }
-  }, [plate, vehicleNotes]);
+  }, [plate, vehicles, scheduledTrips, vehicleNotes]);
+
+  // Update note text when trip number changes
+  useEffect(() => {
+    if (plate && tripNumber) {
+        const key = `${plate}-${tripNumber}`;
+        if (vehicleNotes[key]) {
+            setNote(vehicleNotes[key]);
+        } else {
+            setNote('');
+        }
+    }
+  }, [tripNumber, plate, vehicleNotes]);
 
   // Reset when closing
   useEffect(() => {
     if (!isOpen) {
         setPlate('');
         setNote('');
+        setTripNumber(1);
     }
   }, [isOpen]);
 
@@ -41,7 +86,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (plate && note.trim()) {
-      onSave(plate.toUpperCase().trim(), note);
+      onSave(plate.toUpperCase().trim(), note, tripNumber);
       onClose();
     }
   };
@@ -78,6 +123,29 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
             </div>
           </div>
+
+          {/* Trip Selection - Only show if total trips > 1 */}
+          {plate && totalTrips > 1 && (
+              <div className="animate-in fade-in slide-in-from-top-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Sefer Seçimi</label>
+                <div className="relative">
+                  <ListOrdered className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                  <select
+                    value={tripNumber}
+                    onChange={(e) => setTripNumber(parseInt(e.target.value))}
+                    className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none font-medium transition-all appearance-none cursor-pointer text-slate-700"
+                  >
+                    {Array.from({ length: totalTrips }).map((_, idx) => (
+                        <option key={idx + 1} value={idx + 1}>{idx + 1}. Sefer</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
+                </div>
+                <p className="text-xs text-orange-600 mt-1 ml-1">
+                    Bu araç için {totalTrips} adet sefer bulunmaktadır. Notun ekleneceği seferi seçiniz.
+                </p>
+              </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Not İçeriği</label>

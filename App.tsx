@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog } from './types';
+import { Ramp, Vehicle, VehicleStatus, WarehouseStats, User, ActiveSession, AdminMessage, ChatMessage, SystemLog, DailyArchive } from './types';
 import { RampCard } from './components/RampCard';
 import { VehicleList } from './components/VehicleList';
 import { PlannedTripsList } from './components/PlannedTripsList';
@@ -20,10 +19,11 @@ import { AdminMessageModal } from './components/AdminMessageModal';
 import { ChatModal } from './components/ChatModal';
 import { AdminLogsModal } from './components/AdminLogsModal';
 import { CompleteRampModal } from './components/CompleteRampModal';
-import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock } from 'lucide-react';
+import { ArchiveListModal } from './components/ArchiveListModal';
+import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock, Archive, Eye } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
-import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog } from './services/firebase';
+import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById } from './services/firebase';
 
 // Initial State Generator
 const createInitialRamps = (): Ramp[] => Array.from({ length: 5 }, (_, i) => ({
@@ -74,9 +74,16 @@ const App: React.FC = () => {
   // Chat State
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [lastReadChatTime, setLastReadChatTime] = useState<string>(() => 
+    getStoredState('dockflow_chat_last_read', new Date().toISOString())
+  );
   
   // Sync State
   const [isSynced, setIsSynced] = useState(false);
+
+  // Archive Mode State
+  const [isArchiveMode, setIsArchiveMode] = useState(false);
+  const [archiveDate, setArchiveDate] = useState<string | null>(null);
 
   // Modals State
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -88,6 +95,7 @@ const App: React.FC = () => {
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isPlannedTripsEditorOpen, setIsPlannedTripsEditorOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isArchiveListOpen, setIsArchiveListOpen] = useState(false);
   const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
   const [isEndDayConfirmOpen, setIsEndDayConfirmOpen] = useState(false);
   
@@ -127,7 +135,7 @@ const App: React.FC = () => {
 
   // LOGGING HELPER
   const handleLogAction = (actionType: SystemLog['actionType'], description: string) => {
-    if (!currentUser) return; // Only log if user is logged in (usually)
+    if (!currentUser || isArchiveMode) return; // Only log if user is logged in and NOT in archive mode
 
     const newLog: SystemLog = {
       id: Date.now().toString(),
@@ -147,9 +155,36 @@ const App: React.FC = () => {
     }
   };
 
+  // CHECK FOR ARCHIVE MODE ON MOUNT
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const archiveId = params.get('archiveId');
+    
+    if (archiveId) {
+        setIsArchiveMode(true);
+        // Fetch archive data
+        getArchiveById(archiveId).then((data: any) => {
+            if (data) {
+                setVehicles(data.vehicles || []);
+                setScheduledTrips(data.scheduledTrips || {});
+                setCanceledTrips(data.canceledTrips || {});
+                setVehicleNotes(data.vehicleNotes || {});
+                setArchiveDate(data.date);
+                // Ramps are usually reset in archive, but if saved, could load them. 
+                // We'll just show them as free or whatever was saved if we saved them.
+                // For simplicity, let's keep ramps free in archive view or infer from vehicles if needed.
+                // But generally, archive is about stats and lists.
+                setRamps(createInitialRamps()); // Or load from data if saved
+            } else {
+                alert("Kayıt bulunamadı.");
+            }
+        });
+    }
+  }, []);
+
   // REAL-TIME SYNC SETUP
   useEffect(() => {
-    if (!isFirebaseConfigured()) {
+    if (!isFirebaseConfigured() || isArchiveMode) {
         setIsSynced(false);
         return;
     }
@@ -187,28 +222,55 @@ const App: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isArchiveMode]);
 
   // CHAT SUBSCRIPTION
   useEffect(() => {
-      if (isLoggedIn && isFirebaseConfigured()) {
+      if (isLoggedIn && isFirebaseConfigured() && !isArchiveMode) {
           const unsubscribeChat = subscribeToChat((msgs) => {
               setChatMessages(msgs);
           });
           return () => unsubscribeChat();
       }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, isArchiveMode]);
+
+  // UNREAD CHAT COUNT LOGIC
+  const unreadChatCount = useMemo(() => {
+    if (isChatOpen || !chatMessages.length) return 0;
+    
+    // Count messages that are newer than lastReadChatTime and NOT sent by current user
+    return chatMessages.filter(m => 
+        m.senderUsername !== currentUser?.username && 
+        new Date(m.timestamp).getTime() > new Date(lastReadChatTime).getTime()
+    ).length;
+  }, [chatMessages, lastReadChatTime, isChatOpen, currentUser]);
+
+  // Update Last Read Time when Chat Opens or New Message arrives while open
+  useEffect(() => {
+    if (isChatOpen && chatMessages.length > 0) {
+        // Find the most recent timestamp
+        const latestTimestamp = chatMessages[chatMessages.length - 1].timestamp;
+        
+        // Only update if it's newer than what we have
+        if (new Date(latestTimestamp).getTime() > new Date(lastReadChatTime).getTime()) {
+            setLastReadChatTime(latestTimestamp);
+            window.localStorage.setItem('dockflow_chat_last_read', JSON.stringify(latestTimestamp));
+        }
+    }
+  }, [isChatOpen, chatMessages, lastReadChatTime]);
+
 
   // Local Persistence Fallback (Always update local storage as backup)
-  useEffect(() => { window.localStorage.setItem('dockflow_ramps', JSON.stringify(ramps)); }, [ramps]);
-  useEffect(() => { window.localStorage.setItem('dockflow_vehicles', JSON.stringify(vehicles)); }, [vehicles]);
-  useEffect(() => { window.localStorage.setItem('dockflow_plates', JSON.stringify(availablePlates)); }, [availablePlates]);
-  useEffect(() => { window.localStorage.setItem('dockflow_drivers', JSON.stringify(drivers)); }, [drivers]);
-  useEffect(() => { window.localStorage.setItem('dockflow_trips', JSON.stringify(scheduledTrips)); }, [scheduledTrips]);
-  useEffect(() => { window.localStorage.setItem('dockflow_canceled', JSON.stringify(canceledTrips)); }, [canceledTrips]);
-  useEffect(() => { window.localStorage.setItem('dockflow_notes', JSON.stringify(vehicleNotes)); }, [vehicleNotes]);
-  useEffect(() => { window.localStorage.setItem('dockflow_users_list', JSON.stringify(users)); }, [users]);
-  useEffect(() => { window.localStorage.setItem('dockflow_sessions', JSON.stringify(activeSessions)); }, [activeSessions]);
+  // Disable writing to local storage if in Archive Mode to prevent overwriting current day data
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_ramps', JSON.stringify(ramps)); }, [ramps, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_vehicles', JSON.stringify(vehicles)); }, [vehicles, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_plates', JSON.stringify(availablePlates)); }, [availablePlates, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_drivers', JSON.stringify(drivers)); }, [drivers, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_trips', JSON.stringify(scheduledTrips)); }, [scheduledTrips, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_canceled', JSON.stringify(canceledTrips)); }, [canceledTrips, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_notes', JSON.stringify(vehicleNotes)); }, [vehicleNotes, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_users_list', JSON.stringify(users)); }, [users, isArchiveMode]);
+  useEffect(() => { if(!isArchiveMode) window.localStorage.setItem('dockflow_sessions', JSON.stringify(activeSessions)); }, [activeSessions, isArchiveMode]);
   useEffect(() => {
     if (currentUser) {
       window.localStorage.setItem('dockflow_user', JSON.stringify(currentUser));
@@ -226,7 +288,7 @@ const App: React.FC = () => {
 
   // SECURITY ENFORCEMENT: Account Deletion & Single Session
   useEffect(() => {
-    if (currentUser && currentSessionId) {
+    if (currentUser && currentSessionId && !isArchiveMode) {
         // 1. Check if the user account still exists in the system
         const accountExists = users.some(u => u.username === currentUser.username);
         
@@ -252,11 +314,11 @@ const App: React.FC = () => {
             }
         }
     }
-  }, [users, activeSessions, currentUser, currentSessionId]);
+  }, [users, activeSessions, currentUser, currentSessionId, isArchiveMode]);
 
   // Helper to push updates to cloud
   const pushUpdate = (updates: any) => {
-    if (isFirebaseConfigured()) {
+    if (isFirebaseConfigured() && !isArchiveMode) {
         updateData(updates);
     }
   };
@@ -296,17 +358,6 @@ const App: React.FC = () => {
     return vehicles.filter(v => v.status !== VehicleStatus.INCOMING);
   }, [vehicles]);
 
-  const isDayComplete = useMemo(() => {
-    const hasActiveVehicles = vehicles.some(v => 
-        v.status === VehicleStatus.WAITING || 
-        v.status === VehicleStatus.DOCKING
-    );
-    const waitingCount = Object.values(allRemainingTrips).reduce((total: number, count: number) => total + count, 0);
-    const hasActivity = vehicles.length > 0 || Object.keys(canceledTrips).length > 0;
-
-    return !hasActiveVehicles && waitingCount === 0 && hasActivity;
-  }, [vehicles, allRemainingTrips, canceledTrips]);
-
   const stats: WarehouseStats = useMemo(() => {
     const completed = vehicles.filter(v => v.status === VehicleStatus.COMPLETED);
     const totalProducts = vehicles.reduce((acc, v) => acc + v.productCount, 0);
@@ -344,6 +395,17 @@ const App: React.FC = () => {
     };
   }, [vehicles, ramps, allRemainingTrips, canceledTrips]);
 
+  const isDayComplete = useMemo(() => {
+    const hasActiveVehicles = vehicles.some(v => 
+        v.status === VehicleStatus.WAITING || 
+        v.status === VehicleStatus.DOCKING
+    );
+    const waitingCount = Object.values(allRemainingTrips).reduce((total: number, count: number) => total + count, 0);
+    const hasActivity = vehicles.length > 0 || Object.keys(canceledTrips).length > 0;
+
+    return !hasActiveVehicles && waitingCount === 0 && hasActivity;
+  }, [vehicles, allRemainingTrips, canceledTrips]);
+
   // Handlers
   const handleLogin = (user: User) => {
     const newSessionId = Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -380,13 +442,15 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     if (currentUser) {
-        // Log action before destroying session state
-        handleLogAction('LOGOUT', 'Kullanıcı sistemden çıkış yaptı.');
+        if (!isArchiveMode) {
+            // Log action before destroying session state
+            handleLogAction('LOGOUT', 'Kullanıcı sistemden çıkış yaptı.');
 
-        // Remove from active sessions
-        const newSessions = activeSessions.filter(s => s.username !== currentUser.username);
-        setActiveSessions(newSessions);
-        pushUpdate({ activeSessions: newSessions });
+            // Remove from active sessions
+            const newSessions = activeSessions.filter(s => s.username !== currentUser.username);
+            setActiveSessions(newSessions);
+            pushUpdate({ activeSessions: newSessions });
+        }
     }
     
     setCurrentUser(null);
@@ -396,9 +460,11 @@ const App: React.FC = () => {
     setIsUserManagementOpen(false);
     setIsChatOpen(false);
     setIsLogsModalOpen(false);
+    setIsArchiveListOpen(false);
   };
 
   const handleAddUser = (newUser: User) => {
+    if (isArchiveMode) return;
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
     pushUpdate({ users: updatedUsers });
@@ -406,6 +472,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteUser = (username: string) => {
+    if (isArchiveMode) return;
     const updatedUsers = users.filter(u => u.username !== username);
     setUsers(updatedUsers);
     const updatedSessions = activeSessions.filter(s => s.username !== username);
@@ -416,7 +483,7 @@ const App: React.FC = () => {
 
   // ADMIN MESSAGING HANDLERS
   const handleSendAdminMessage = (targetUsername: string, messageContent: string) => {
-    if (!currentUser) return;
+    if (!currentUser || isArchiveMode) return;
     
     const newMessage: AdminMessage = {
         id: Date.now().toString(),
@@ -433,6 +500,7 @@ const App: React.FC = () => {
   };
 
   const handleDismissAdminMessage = (id: string) => {
+    if (isArchiveMode) return;
     const newMessages = adminMessages.filter(m => m.id !== id);
     setAdminMessages(newMessages);
     pushUpdate({ messages: newMessages });
@@ -440,7 +508,7 @@ const App: React.FC = () => {
 
   // CHAT HANDLERS
   const handleSendChatMessage = (content: string) => {
-    if (!currentUser) return;
+    if (!currentUser || isArchiveMode) return;
     
     const message = {
         senderUsername: currentUser.username,
@@ -452,9 +520,27 @@ const App: React.FC = () => {
     sendChatMessage(message);
   };
 
-  const performEndDayReset = () => {
+  const performEndDayReset = async () => {
+    if (isArchiveMode) return; // Cannot reset from archive mode
+
     handleLogAction('RESET', 'Günü bitir işlemi uygulandı. Sistem verileri sıfırlandı.');
 
+    // 1. SAVE ARCHIVE BEFORE RESETTING
+    const archiveData: Omit<DailyArchive, 'id'> = {
+        date: new Date().toISOString(),
+        vehicles,
+        scheduledTrips,
+        canceledTrips,
+        vehicleNotes,
+        stats, // Using the memoized stats from current state
+        closedBy: currentUser?.username || 'system'
+    };
+    
+    if (isFirebaseConfigured()) {
+        await saveDailyArchive(archiveData);
+    }
+
+    // 2. RESET STATE
     // Reset drivers state using DRIVER_REGISTRY
     const newDrivers = DRIVER_REGISTRY;
     // Reset available plates using keys from DRIVER_REGISTRY
@@ -490,6 +576,7 @@ const App: React.FC = () => {
   };
 
   const handleAddScheduledTrip = (plate: string, count: number) => {
+    if (isArchiveMode) return;
     const currentBase = scheduledTrips[plate] !== undefined 
         ? scheduledTrips[plate] 
         : (allRemainingTrips[plate] || 0);
@@ -535,6 +622,7 @@ const App: React.FC = () => {
       newDriverData?: Record<string, DriverInfo>,
       deletedPlates?: string[]
   ) => {
+    if (isArchiveMode) return;
     let finalAvailablePlates = [...availablePlates];
     let finalDrivers = { ...drivers };
     let finalScheduledTrips = { ...scheduledTrips };
@@ -579,10 +667,10 @@ const App: React.FC = () => {
         Object.keys(newDriverData).forEach(key => {
             if (!deletedPlates?.includes(key)) {
                 validNewDrivers[key] = newDriverData[key];
+                handleLogAction('UPDATE', `Listeye yeni araç eklendi: ${key} (${newDriverData[key].name})`);
             }
         });
         finalDrivers = { ...finalDrivers, ...validNewDrivers };
-        handleLogAction('UPDATE', `Toplu düzenleme ile ${Object.keys(validNewDrivers).length} yeni araç/sürücü eklendi.`);
     }
 
     setScheduledTrips(finalScheduledTrips);
@@ -603,6 +691,7 @@ const App: React.FC = () => {
   };
 
   const handleAssignFromPlanned = (plate: string) => {
+    if (isArchiveMode) return;
     setTargetPlate(plate);
     setTargetProductCount(null);
     setIsModalOpen(true);
@@ -611,6 +700,7 @@ const App: React.FC = () => {
   // --- CONFIRMATION HANDLERS START ---
 
   const initiateCancelTrip = (plate: string) => {
+    if (isArchiveMode) return;
     setConfirmState({
       isOpen: true,
       action: 'CANCEL_PLANNED',
@@ -630,8 +720,12 @@ const App: React.FC = () => {
 
         const newVehicles = vehicles.filter(v => {
             if (v.licensePlate === plate) {
-                if (v.status === VehicleStatus.INCOMING || v.status === VehicleStatus.WAITING) {
+                if (v.status === VehicleStatus.INCOMING) {
                     return false;
+                }
+                if (v.status === VehicleStatus.WAITING) {
+                    v.status = VehicleStatus.CANCELED;
+                    return true;
                 }
             }
             return true;
@@ -649,6 +743,7 @@ const App: React.FC = () => {
   };
 
   const initiateCancelWaitingVehicle = (vehicleId: string) => {
+    if (isArchiveMode) return;
     setConfirmState({
       isOpen: true,
       action: 'CANCEL_WAITING',
@@ -662,6 +757,7 @@ const App: React.FC = () => {
   const performCancelWaitingVehicle = (vehicleId: string) => {
     const vehicleToCancel = vehicles.find(v => v.id === vehicleId);
     
+    // Completely remove vehicle from the list instead of marking as CANCELED
     const newVehicles = vehicles.filter(v => v.id !== vehicleId);
     setVehicles(newVehicles);
 
@@ -682,6 +778,7 @@ const App: React.FC = () => {
   };
 
   const initiateClearRamp = (rampId: string) => {
+    if (isArchiveMode) return;
     setCompletingRampId(rampId);
   };
 
@@ -725,6 +822,7 @@ const App: React.FC = () => {
   };
 
   const initiateRevertRamp = (rampId: string) => {
+    if (isArchiveMode) return;
     setConfirmState({
       isOpen: true,
       action: 'REVERT_RAMP',
@@ -791,23 +889,49 @@ const App: React.FC = () => {
   // --- CONFIRMATION HANDLERS END ---
 
   const handleRemoveOneTrip = (plate: string) => {
+    if (isArchiveMode) return;
+    // Determine the history count to find the specific trip number being removed
+    const historyCount = vehicles.filter(v => 
+        v.licensePlate === plate && 
+        v.status !== VehicleStatus.CANCELED && 
+        v.status !== VehicleStatus.INCOMING
+    ).length;
+
     const currentCount = allRemainingTrips[plate];
-    if (currentCount > 1) {
-        const currentScheduled = scheduledTrips[plate];
+    const currentScheduled = scheduledTrips[plate];
+    
+    // The specific trip number is history count + current scheduled count
+    // Example: 1 in history, 2 scheduled. We are removing trip #3.
+    const tripToRemove = historyCount + currentCount;
+    const noteKey = `${plate}-${tripToRemove}`;
+
+    // Remove Note if exists
+    let newNotes = { ...vehicleNotes };
+    if (newNotes[noteKey]) {
+        delete newNotes[noteKey];
+        setVehicleNotes(newNotes);
+    }
+
+    if (currentCount >= 1) {
         if (currentScheduled !== undefined && currentScheduled > 1) {
             const newScheduled = { ...scheduledTrips, [plate]: currentScheduled - 1 };
             setScheduledTrips(newScheduled);
-            pushUpdate({ scheduledTrips: newScheduled });
-        } else if (currentScheduled === undefined) {
-            const newScheduled = { ...scheduledTrips, [plate]: currentCount - 1 };
+            pushUpdate({ scheduledTrips: newScheduled, vehicleNotes: newNotes });
+        } else if (currentScheduled === undefined || currentScheduled === 1) {
+            // If explicit 1, or implicit 1 (allRemainingTrips)
+            // If explicit 1 -> 0
+            // If undefined (implicit 1) -> 0
+            const countToSet = (currentScheduled || currentCount) - 1;
+            const newScheduled = { ...scheduledTrips, [plate]: countToSet };
             setScheduledTrips(newScheduled);
-            pushUpdate({ scheduledTrips: newScheduled });
+            pushUpdate({ scheduledTrips: newScheduled, vehicleNotes: newNotes });
         }
-        handleLogAction('UPDATE', `${plate} için sefer sayısı 1 azaltıldı.`);
+        handleLogAction('UPDATE', `${plate} için sefer sayısı 1 azaltıldı (Sefer ${tripToRemove}). Not silindi.`);
     }
   };
 
   const handleRestoreTrip = (plate: string) => {
+    if (isArchiveMode) return;
     const newCanceled = { ...canceledTrips };
     delete newCanceled[plate];
     setCanceledTrips(newCanceled);
@@ -825,6 +949,7 @@ const App: React.FC = () => {
   };
 
   const handleAddVehicle = (data: { licensePlate: string; productCount: number; rampId: string | null; driverName?: string; driverPhone?: string }) => {
+    if (isArchiveMode) return;
     const newVehicleId = Math.random().toString(36).substr(2, 9);
     const previousTrips = vehicles.filter(v => v.licensePlate === data.licensePlate).length;
     const currentTripCount = previousTrips + 1;
@@ -895,14 +1020,17 @@ const App: React.FC = () => {
     });
   };
 
-  const handleAddNote = (plate: string, note: string) => {
-    const newNotes = { ...vehicleNotes, [plate]: note };
+  const handleAddNote = (plate: string, note: string, tripNumber: number) => {
+    if (isArchiveMode) return;
+    const key = `${plate}-${tripNumber}`;
+    const newNotes = { ...vehicleNotes, [key]: note };
     setVehicleNotes(newNotes);
     pushUpdate({ vehicleNotes: newNotes });
-    handleLogAction('UPDATE', `${plate} aracına not eklendi.`);
+    handleLogAction('UPDATE', `${plate} aracına (${tripNumber}. Sefer) not eklendi.`);
   };
 
   const handleAddPlateToData = (newPlate: string) => {
+    if (isArchiveMode) return;
     if (!availablePlates.includes(newPlate)) {
         const newAvailable = [newPlate, ...availablePlates];
         setAvailablePlates(newAvailable);
@@ -916,11 +1044,12 @@ const App: React.FC = () => {
   };
 
   const handleOpenAssignModal = (vehicleId: string) => {
+    if (isArchiveMode) return;
     setAssigningVehicleId(vehicleId);
   };
 
   const handleConfirmAssignment = (rampId: string) => {
-    if (!assigningVehicleId) return;
+    if (!assigningVehicleId || isArchiveMode) return;
 
     let newScheduled = scheduledTrips;
 
@@ -954,6 +1083,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateDriver = (plate: string, name: string, phone: string) => {
+    if (isArchiveMode) return;
     const newDrivers = { ...drivers, [plate]: { name, phone } };
     setDrivers(newDrivers);
     pushUpdate({ drivers: newDrivers });
@@ -962,6 +1092,7 @@ const App: React.FC = () => {
 
   // Quantity Edit Handlers
   const openEditQuantity = (vehicleId: string, currentCount: number, incomingSacks: number = 0, outgoingSacks: number = 0, hideSacks: boolean = false) => {
+    if (isArchiveMode) return;
     setEditingVehicleId(vehicleId);
     setEditingValues({
         count: currentCount,
@@ -973,7 +1104,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateQuantity = (newCount: number, newIncoming: number, newOutgoing: number) => {
-    if (!editingVehicleId) return;
+    if (!editingVehicleId || isArchiveMode) return;
     
     const vehicle = vehicles.find(v => v.id === editingVehicleId);
     const newVehicles = vehicles.map(v => 
@@ -995,6 +1126,31 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
+      {/* Archive Mode Banner */}
+      {isArchiveMode && archiveDate && (
+          <div className="bg-indigo-600 text-white px-6 py-3 shadow-md sticky top-0 z-[60] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                  <Eye size={24} className="animate-pulse" />
+                  <div>
+                      <h2 className="font-bold text-lg leading-none">Geçmiş Kayıt İnceleme Modu</h2>
+                      <p className="text-xs text-indigo-200">
+                          {new Date(archiveDate).toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} tarihli kayıt görüntüleniyor.
+                      </p>
+                  </div>
+              </div>
+              <button 
+                onClick={() => {
+                    window.close(); // Try to close tab
+                    // Fallback if script can't close
+                    window.location.href = window.location.pathname; 
+                }}
+                className="px-4 py-2 bg-white text-indigo-700 rounded-lg font-bold text-sm hover:bg-indigo-50 transition-colors"
+              >
+                  Moddan Çık
+              </button>
+          </div>
+      )}
+
       {/* Navbar */}
       <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -1008,7 +1164,11 @@ const App: React.FC = () => {
                     <span className="text-orange-600">Inbound</span>
                 </h1>
                 <div className="flex items-center gap-2">
-                    {isFirebaseConfigured() ? (
+                    {isArchiveMode ? (
+                        <span className="flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-bold border border-indigo-100">
+                            <Eye size={10} /> Salt Okunur
+                        </span>
+                    ) : isFirebaseConfigured() ? (
                         isSynced ? (
                              <span className="flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-100">
                                 <Cloud size={10} /> Canlı Senkronizasyon
@@ -1036,7 +1196,7 @@ const App: React.FC = () => {
                              {isAdmin && <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1 rounded">ADMIN</span>}
                         </div>
                     </div>
-                    {isAdmin && (
+                    {isAdmin && !isArchiveMode && (
                         <>
                             <button
                                 onClick={() => setIsLogsModalOpen(true)}
@@ -1055,13 +1215,25 @@ const App: React.FC = () => {
                             </button>
                         </>
                     )}
-                    <button 
-                        onClick={() => setIsSettingsOpen(true)}
-                        className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors text-sm font-medium border border-slate-200"
-                    >
-                        <LayoutDashboard size={18} />
-                        <span>Panel</span>
-                    </button>
+                    {!isArchiveMode && (
+                        <button 
+                            onClick={() => setIsArchiveListOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-colors text-sm font-medium border border-indigo-100"
+                            title="Geçmiş Kayıtlar"
+                        >
+                            <Archive size={18} />
+                            <span className="hidden sm:inline">Geçmiş</span>
+                        </button>
+                    )}
+                    {!isArchiveMode && (
+                        <button 
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors text-sm font-medium border border-slate-200"
+                        >
+                            <LayoutDashboard size={18} />
+                            <span>Panel</span>
+                        </button>
+                    )}
                     <button 
                         onClick={handleLogout}
                         className="flex items-center gap-2 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors text-sm font-medium border border-rose-100"
@@ -1085,7 +1257,7 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {/* Operation Complete Banner */}
-        {isLoggedIn && isDayComplete && (
+        {isLoggedIn && isDayComplete && !isArchiveMode && (
           <div className="mb-8 bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-orange-100 relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
             <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black opacity-5 rounded-full blur-2xl"></div>
@@ -1120,7 +1292,7 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-slate-800">Operasyon Özeti</h2>
             <p className="text-slate-500 mt-1">Gelen araç trafiği ve rampa yönetimi.</p>
           </div>
-          {isLoggedIn && (
+          {isLoggedIn && !isArchiveMode && (
               <div className="flex flex-wrap gap-3">
                 <button 
                     onClick={() => setIsNoteModalOpen(true)}
@@ -1154,7 +1326,7 @@ const App: React.FC = () => {
         <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-lg text-slate-700">Rampa Durumu</h3>
-                <span className="text-xs font-medium bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Canlı İzleme</span>
+                {!isArchiveMode && <span className="text-xs font-medium bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Canlı İzleme</span>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {ramps.map(ramp => (
@@ -1164,7 +1336,7 @@ const App: React.FC = () => {
                         vehicle={vehicles.find(v => v.id === ramp.currentVehicleId)}
                         onClearRamp={initiateClearRamp}
                         onRevertAssignment={isLoggedIn ? initiateRevertRamp : undefined}
-                        readOnly={!isLoggedIn}
+                        readOnly={!isLoggedIn || isArchiveMode}
                     />
                 </div>
             ))}
@@ -1180,7 +1352,7 @@ const App: React.FC = () => {
                 onAssignRamp={handleOpenAssignModal}
                 onCancelWaiting={initiateCancelWaitingVehicle}
                 onEditQuantity={isLoggedIn ? openEditQuantity : undefined}
-                readOnly={!isLoggedIn}
+                readOnly={!isLoggedIn || isArchiveMode}
             />
 
             {/* Planned Trips */}
@@ -1193,7 +1365,7 @@ const App: React.FC = () => {
                 onCancel={initiateCancelTrip}
                 onRemoveOneTrip={handleRemoveOneTrip}
                 onRestore={handleRestoreTrip}
-                readOnly={!isLoggedIn}
+                readOnly={!isLoggedIn || isArchiveMode}
                 vehicles={vehicles}
                 onOpenEditor={() => setIsPlannedTripsEditorOpen(true)}
                 onEditQuantity={isLoggedIn ? openEditQuantity : undefined}
@@ -1209,16 +1381,21 @@ const App: React.FC = () => {
         users={users}
       />
 
-      {isLoggedIn && (
+      {isLoggedIn && !isArchiveMode && (
         <>
             {/* Chat Floating Button */}
             {!isChatOpen && (
               <button
                 onClick={() => setIsChatOpen(true)}
-                className="fixed bottom-6 right-6 z-40 p-4 bg-orange-600 text-white rounded-full shadow-2xl hover:bg-orange-700 hover:scale-105 transition-all flex items-center justify-center group"
+                className="fixed bottom-6 right-6 z-40 p-4 bg-orange-600 text-white rounded-full shadow-2xl hover:bg-orange-700 hover:scale-105 transition-all flex items-center justify-center group relative"
                 title="Ekip Sohbeti"
               >
                 <MessageSquare size={24} className="group-hover:animate-bounce" />
+                {unreadChatCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-pulse">
+                        {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                    </span>
+                )}
               </button>
             )}
 
@@ -1256,6 +1433,8 @@ const App: React.FC = () => {
                 onSave={handleAddNote}
                 availablePlates={availablePlates}
                 vehicleNotes={vehicleNotes}
+                vehicles={vehicles}
+                scheduledTrips={allRemainingTrips}
             />
 
             <PlannedTripsEditorModal
@@ -1297,6 +1476,11 @@ const App: React.FC = () => {
                 onUpdateDriver={handleUpdateDriver}
                 availablePlates={availablePlates}
                 onSystemReset={() => setIsEndDayConfirmOpen(true)}
+            />
+
+            <ArchiveListModal
+                isOpen={isArchiveListOpen}
+                onClose={() => setIsArchiveListOpen(false)}
             />
 
             {isAdmin && currentUser && (
