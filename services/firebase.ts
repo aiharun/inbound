@@ -1,6 +1,7 @@
 // src/services/firebase.ts
 
 import { initializeApp } from "firebase/app";
+// @ts-ignore
 import { 
   getFirestore, 
   doc, 
@@ -30,11 +31,18 @@ const firebaseConfig = {
   measurementId: "G-HJ8P8KLN7J"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let app;
+let db: any;
+let mainDocRef: any;
 
-// REFERANSLAR
-const DATA_DOC_REF = doc(db, "dockflow", "live_data");
+try {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  // REFERANSLAR
+  mainDocRef = doc(db, "dockflow", "live_data");
+} catch (error) {
+  console.error("Firebase init error:", error);
+}
 
 // --- TEMİZLEYİCİ ---
 const cleanData = (data: any) => {
@@ -53,6 +61,7 @@ let internalState: any = {
 };
 
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
+  if (!db || !mainDocRef) return () => {};
   console.log("🔥 Firebase: Senkronizasyon Modu Aktif...");
 
   const emit = () => {
@@ -60,7 +69,7 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   };
 
   // 1. Operasyonel Veriler
-  const unsubMain = onSnapshot(DATA_DOC_REF, (snap) => {
+  const unsubMain = onSnapshot(mainDocRef, (snap: any) => {
     if (snap.exists()) {
       const data = snap.data();
       const { users, drivers, availablePlates, ...operationalData } = data;
@@ -70,19 +79,19 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
   });
 
   // 2. Kullanıcılar
-  const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+  const unsubUsers = onSnapshot(collection(db, "users"), (snap: any) => {
     const usersList: any[] = [];
-    snap.forEach(doc => usersList.push(doc.data()));
+    snap.forEach((doc: any) => usersList.push(doc.data()));
     internalState.users = usersList;
     emit();
   });
 
   // 3. Plakalar ve Sürücüler
-  const unsubPlates = onSnapshot(collection(db, "plates"), (snap) => {
+  const unsubPlates = onSnapshot(collection(db, "plates"), (snap: any) => {
     const driversObj: any = {};
     const platesList: string[] = [];
 
-    snap.forEach(doc => {
+    snap.forEach((doc: any) => {
       const plate = doc.id;
       driversObj[plate] = doc.data();
       platesList.push(plate);
@@ -93,10 +102,33 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
     emit();
   });
 
+  // 4. Listener: Admin Messages Collection
+  const unsubMessages = onSnapshot(collection(db, "messages"), (snap: any) => {
+      const messages: any[] = [];
+      snap.forEach((docSnap: any) => {
+          messages.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      internalState.messages = messages;
+      emit();
+  });
+
+  // 5. Listener: System Logs (Recent 200)
+  const logsQuery = query(collection(db, "system_logs"), orderBy("timestamp", "desc"), limit(200));
+  const unsubLogs = onSnapshot(logsQuery, (snap: any) => {
+      const logs: any[] = [];
+      snap.forEach((docSnap: any) => {
+          logs.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      internalState.systemLogs = logs;
+      emit();
+  });
+
   return () => {
     unsubMain();
     unsubUsers();
     unsubPlates();
+    unsubMessages();
+    unsubLogs();
   };
 };
 
@@ -105,6 +137,7 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
 // ==========================================
 
 export const updateData = async (updates: any) => {
+  if (!db || !mainDocRef) return;
   try {
     const batch = writeBatch(db);
     let hasBatchOps = false;
@@ -119,7 +152,7 @@ export const updateData = async (updates: any) => {
       const newUsernameList = updates.users.map((u: any) => u.username);
 
       // 2. Listede olmayanları veritabanından SİL
-      currentUsersSnap.docs.forEach((doc) => {
+      currentUsersSnap.docs.forEach((doc: any) => {
         if (!newUsernameList.includes(doc.id)) {
           batch.delete(doc.ref); // Silme işlemi
           hasBatchOps = true;
@@ -147,7 +180,7 @@ export const updateData = async (updates: any) => {
       const newPlateList = Object.keys(updates.drivers);
 
       // 2. Listede olmayanları SİL
-      currentPlatesSnap.docs.forEach((doc) => {
+      currentPlatesSnap.docs.forEach((doc: any) => {
         if (!newPlateList.includes(doc.id)) {
           batch.delete(doc.ref); // Silme işlemi
           hasBatchOps = true;
@@ -173,7 +206,7 @@ export const updateData = async (updates: any) => {
     // İşlemleri Uygula
     if (hasBatchOps) await batch.commit();
     if (Object.keys(mainDocUpdates).length > 0) {
-      await setDoc(DATA_DOC_REF, mainDocUpdates, { merge: true });
+      await setDoc(mainDocRef, mainDocUpdates, { merge: true });
     }
 
   } catch (error) {
@@ -186,19 +219,20 @@ export const updateData = async (updates: any) => {
 // ==========================================
 
 export const resetCloudData = async (fullData: any) => {
+  if (!db || !mainDocRef) return;
   try {
     // Operasyonel veriyi sıfırla
     const { users, drivers, availablePlates, ...operational } = fullData;
-    await setDoc(DATA_DOC_REF, cleanData(operational));
+    await setDoc(mainDocRef, cleanData(operational));
 
     const batch = writeBatch(db);
 
     // Eski kullanıcıları temizlemek için önce hepsini silmek daha güvenli (Reset için)
     const usersSnap = await getDocs(collection(db, "users"));
-    usersSnap.forEach(d => batch.delete(d.ref));
+    usersSnap.forEach((d: any) => batch.delete(d.ref));
 
     const platesSnap = await getDocs(collection(db, "plates"));
-    platesSnap.forEach(d => batch.delete(d.ref));
+    platesSnap.forEach((d: any) => batch.delete(d.ref));
 
     // Yenileri ekle
     if (users) {
@@ -226,18 +260,21 @@ export const resetCloudData = async (fullData: any) => {
 // ==========================================
 
 export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
+  if (!db) return () => {};
   const q = query(collection(db, "chat_messages"), orderBy("timestamp", "asc"), limit(100));
-  return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return onSnapshot(q, (snapshot: any) => {
+    const messages = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     onMessages(messages);
   });
 };
 
 export const sendChatMessage = async (message: any) => {
+  if (!db) return;
   await addDoc(collection(db, "chat_messages"), cleanData(message));
 };
 
 export const addSystemLog = async (log: any) => {
+   if (!db) return;
    await addDoc(collection(db, "system_logs"), cleanData(log));
 }
 
@@ -260,7 +297,7 @@ export const saveDailyArchive = async (archiveData: any) => {
         const snapshot = await getDocs(q);
         if (snapshot.size > 7) {
             const batch = writeBatch(db);
-            snapshot.docs.slice(0, snapshot.size - 7).forEach(d => batch.delete(d.ref));
+            snapshot.docs.slice(0, snapshot.size - 7).forEach((d: any) => batch.delete(d.ref));
             await batch.commit();
         }
     } catch (error) {
@@ -269,14 +306,25 @@ export const saveDailyArchive = async (archiveData: any) => {
 };
 
 export const getDailyArchives = async () => {
+    if (!db) return [];
     const q = query(collection(db, "daily_archives"), orderBy("date", "desc"));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 };
 
 export const getArchiveById = async (id: string) => {
+    if (!db) return null;
     const docSnap = await getDoc(doc(db, "daily_archives", id));
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+};
+
+export const deleteDailyArchive = async (id: string) => {
+    if (!db) return;
+    try {
+        await deleteDoc(doc(db, "daily_archives", id));
+    } catch (error) {
+        console.error("Error deleting archive:", error);
+    }
 };
 
 export const isFirebaseConfigured = () => !!firebaseConfig.apiKey;

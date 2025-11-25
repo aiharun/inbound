@@ -1387,15 +1387,17 @@ const App: React.FC = () => {
             {!isChatOpen && (
               <button
                 onClick={() => setIsChatOpen(true)}
-                className="fixed bottom-6 right-6 z-40 p-4 bg-orange-600 text-white rounded-full shadow-2xl hover:bg-orange-700 hover:scale-105 transition-all flex items-center justify-center group relative"
+                className="fixed bottom-6 right-6 z-[100] flex items-center justify-center p-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-full shadow-2xl hover:shadow-orange-500/30 hover:scale-105 transition-all group"
                 title="Ekip Sohbeti"
               >
-                <MessageSquare size={24} className="group-hover:animate-bounce" />
-                {unreadChatCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-pulse">
-                        {unreadChatCount > 9 ? '9+' : unreadChatCount}
-                    </span>
-                )}
+                <div className="relative">
+                    <MessageSquare size={24} className="group-hover:animate-bounce" />
+                    {unreadChatCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-white text-red-600 text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-red-100 animate-pulse shadow-sm">
+                            {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                        </span>
+                    )}
+                </div>
               </button>
             )}
 

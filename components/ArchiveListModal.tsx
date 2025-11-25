@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Calendar, ArrowRight, ExternalLink, Archive } from 'lucide-react';
-import { getDailyArchives } from '../services/firebase';
+import { X, Calendar, ArrowRight, ExternalLink, Archive, Trash2 } from 'lucide-react';
+import { getDailyArchives, deleteDailyArchive } from '../services/firebase';
 import { DailyArchive } from '../types';
 
 interface ArchiveListModalProps {
@@ -30,6 +30,13 @@ export const ArchiveListModal: React.FC<ArchiveListModalProps> = ({ isOpen, onCl
     const url = new URL(window.location.href);
     url.searchParams.set('archiveId', id);
     window.open(url.toString(), '_blank');
+  };
+
+  const handleDelete = async (id: string) => {
+      if (window.confirm("Bu geçmiş kaydı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) {
+          await deleteDailyArchive(id);
+          setArchives(prev => prev.filter(a => a.id !== id));
+      }
   };
 
   return (
@@ -79,12 +86,22 @@ export const ArchiveListModal: React.FC<ArchiveListModalProps> = ({ isOpen, onCl
                                     <span>Saat: {new Date(archive.date).toLocaleTimeString('tr-TR')}</span>
                                 </div>
                             </div>
-                            <button 
-                                onClick={() => handleOpenArchive(archive.id)}
-                                className="flex items-center gap-2 px-3 py-2 bg-white text-indigo-600 border border-indigo-100 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition-colors shadow-sm"
-                            >
-                                İncele <ExternalLink size={12} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => handleOpenArchive(archive.id)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-white text-indigo-600 border border-indigo-100 rounded-lg text-xs font-bold hover:bg-indigo-600 hover:text-white transition-colors shadow-sm"
+                                    title="İncele"
+                                >
+                                    <ExternalLink size={14} />
+                                </button>
+                                <button 
+                                    onClick={() => handleDelete(archive.id)}
+                                    className="flex items-center justify-center p-2 bg-white text-red-500 border border-red-100 rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors shadow-sm"
+                                    title="Kaydı Sil"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
                         </div>
                         
                         {/* Mini Stats Summary */}
