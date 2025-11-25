@@ -21,7 +21,7 @@ import { ChatModal } from './components/ChatModal';
 import { AdminLogsModal } from './components/AdminLogsModal';
 import { CompleteRampModal } from './components/CompleteRampModal';
 import { ArchiveListModal } from './components/ArchiveListModal';
-import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock, Archive, Eye } from 'lucide-react';
+import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock, Archive, Eye, Menu, X } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
 import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById, clearAllChatMessages, subscribeToChatSettings, saveChatSettings, checkPeriodicChatCleanup } from './services/firebase';
@@ -86,6 +86,9 @@ const App: React.FC = () => {
   // Archive Mode State
   const [isArchiveMode, setIsArchiveMode] = useState(false);
   const [archiveDate, setArchiveDate] = useState<string | null>(null);
+
+  // Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Modals State
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -484,6 +487,7 @@ const App: React.FC = () => {
     setIsChatOpen(false);
     setIsLogsModalOpen(false);
     setIsArchiveListOpen(false);
+    setIsMobileMenuOpen(false);
   };
 
   const handleAddUser = (newUser: User) => {
@@ -1196,7 +1200,7 @@ const App: React.FC = () => {
       )}
 
       {/* Navbar */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
+      <nav className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 sticky top-0 z-30 shadow-sm relative">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <div className="bg-orange-600 p-2 rounded-lg">
@@ -1230,10 +1234,12 @@ const App: React.FC = () => {
                 </div>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-4">
             {isLoggedIn ? (
                 <>
-                    <div className="hidden md:flex items-center space-x-2 text-sm text-slate-500 border-r border-slate-200 pr-4 mr-1">
+                    <div className="flex items-center space-x-2 text-sm text-slate-500 border-r border-slate-200 pr-4 mr-1">
                         <span className={`w-2 h-2 rounded-full animate-pulse ${isAdmin ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
                         <div className="flex flex-col items-end leading-tight">
                              <span className="font-medium text-slate-700">{currentUser.name}</span>
@@ -1248,14 +1254,14 @@ const App: React.FC = () => {
                                 title="Sistem Kayıtları"
                             >
                                 <FileClock size={18} />
-                                <span className="hidden sm:inline">Loglar</span>
+                                <span>Loglar</span>
                             </button>
                             <button
                                 onClick={() => setIsUserManagementOpen(true)}
                                 className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors text-sm font-medium border border-purple-100"
                             >
                                 <Users size={18} />
-                                <span className="hidden sm:inline">Kullanıcılar</span>
+                                <span>Kullanıcılar</span>
                             </button>
                         </>
                     )}
@@ -1266,7 +1272,7 @@ const App: React.FC = () => {
                             title="Geçmiş Kayıtlar"
                         >
                             <Archive size={18} />
-                            <span className="hidden sm:inline">Geçmiş</span>
+                            <span>Geçmiş</span>
                         </button>
                     )}
                     {!isArchiveMode && (
@@ -1283,7 +1289,7 @@ const App: React.FC = () => {
                         className="flex items-center gap-2 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors text-sm font-medium border border-rose-100"
                     >
                         <LogOut size={18} />
-                        <span className="hidden sm:inline">Çıkış</span>
+                        <span>Çıkış</span>
                     </button>
                 </>
             ) : (
@@ -1296,7 +1302,79 @@ const App: React.FC = () => {
                 </button>
             )}
           </div>
+
+          {/* Mobile Menu Button */}
+          <div className="md:hidden flex items-center">
+              {isLoggedIn ? (
+                  <button 
+                      onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                      {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                  </button>
+              ) : (
+                    <button 
+                        onClick={() => setIsLoginModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors text-sm font-bold shadow-lg shadow-orange-200"
+                    >
+                        <LogIn size={18} />
+                        <span>Giriş</span>
+                    </button>
+              )}
+          </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {isLoggedIn && isMobileMenuOpen && (
+            <div className="md:hidden pt-4 pb-2 border-t border-slate-100 mt-4 space-y-2 animate-in slide-in-from-top-2">
+                 <div className="flex items-center gap-3 px-2 py-2 mb-2 bg-slate-50 rounded-lg">
+                    <span className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
+                    <div className="flex flex-col">
+                         <span className="font-bold text-slate-700">{currentUser?.name}</span>
+                         <span className="text-xs text-slate-500">@{currentUser?.username}</span>
+                    </div>
+                </div>
+
+                {isAdmin && !isArchiveMode && (
+                    <>
+                        <button 
+                            onClick={() => { setIsLogsModalOpen(true); setIsMobileMenuOpen(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 bg-indigo-50 text-indigo-700 rounded-lg font-medium"
+                        >
+                            <FileClock size={20} /> Sistem Kayıtları
+                        </button>
+                        <button 
+                            onClick={() => { setIsUserManagementOpen(true); setIsMobileMenuOpen(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 bg-purple-50 text-purple-700 rounded-lg font-medium"
+                        >
+                            <Users size={20} /> Kullanıcılar
+                        </button>
+                    </>
+                )}
+                {!isArchiveMode && (
+                    <>
+                        <button 
+                            onClick={() => { setIsArchiveListOpen(true); setIsMobileMenuOpen(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 bg-indigo-50 text-indigo-700 rounded-lg font-medium"
+                        >
+                            <Archive size={20} /> Geçmiş Kayıtlar
+                        </button>
+                        <button 
+                            onClick={() => { setIsSettingsOpen(true); setIsMobileMenuOpen(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 bg-slate-100 text-slate-700 rounded-lg font-medium"
+                        >
+                            <LayoutDashboard size={20} /> Yönetim Paneli
+                        </button>
+                    </>
+                )}
+                 <button 
+                    onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-3 bg-rose-50 text-rose-600 rounded-lg font-medium"
+                >
+                    <LogOut size={20} /> Çıkış Yap
+                </button>
+            </div>
+        )}
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -1431,7 +1509,7 @@ const App: React.FC = () => {
             {!isChatOpen && (
               <button
                 onClick={() => setIsChatOpen(true)}
-                className="fixed bottom-6 right-6 z-[100] flex items-center justify-center p-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-full shadow-2xl hover:shadow-orange-500/30 hover:scale-105 transition-all group"
+                className="fixed bottom-6 right-6 z-[100] flex items-center justify-center p-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-full shadow-2xl hover:shadow-orange-500/30 hover:scale-105 transition-all group m-4"
                 title="Ekip Sohbeti"
               >
                 <div className="relative">
