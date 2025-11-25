@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft, Trash, Save } from 'lucide-react';
+import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft, Trash, Save, Timer } from 'lucide-react';
 import { User as UserType, ActiveSession } from '../types';
 
 interface UserManagementModalProps {
@@ -13,6 +13,8 @@ interface UserManagementModalProps {
   currentUser: UserType;
   onSendMessage: (targetUsername: string, messageContent: string) => void;
   onClearChat?: () => void;
+  onSaveChatSettings?: (seconds: number) => void;
+  currentRetentionSeconds?: number;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -24,7 +26,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   onDeleteUser,
   currentUser,
   onSendMessage,
-  onClearChat
+  onClearChat,
+  onSaveChatSettings,
+  currentRetentionSeconds = 0
 }) => {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -35,6 +39,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   // Messaging State
   const [messagingUser, setMessagingUser] = useState<UserType | null>(null);
   const [messageBody, setMessageBody] = useState('');
+  
+  // Chat Retention State
+  const [retentionHours, setRetentionHours] = useState(Math.floor(currentRetentionSeconds / 3600));
+  const [retentionMinutes, setRetentionMinutes] = useState(Math.floor((currentRetentionSeconds % 3600) / 60));
+  const [retentionSeconds, setRetentionSeconds] = useState(currentRetentionSeconds % 60);
 
   if (!isOpen) return null;
 
@@ -78,6 +87,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     if (onClearChat && window.confirm("Tüm sohbet geçmişi kalıcı olarak silinecek. Emin misiniz?")) {
         onClearChat();
     }
+  };
+
+  const handleSaveRetention = () => {
+      if (onSaveChatSettings) {
+          const totalSeconds = (retentionHours * 3600) + (retentionMinutes * 60) + retentionSeconds;
+          onSaveChatSettings(totalSeconds);
+          alert("Sohbet geçmişi ayarları güncellendi.");
+      }
   };
 
   return (
@@ -187,21 +204,76 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
             {/* Chat Management for Admin */}
             {onClearChat && (
-                <div className="bg-red-50 p-5 rounded-xl border border-red-200">
-                    <h3 className="font-bold text-red-800 mb-3 flex items-center gap-2">
-                        <Trash size={18} className="text-red-600" />
-                        Sohbet Yönetimi
-                    </h3>
-                    <p className="text-xs text-red-700 mb-4">
-                        Sohbet geçmişini manuel olarak temizleyin.
-                    </p>
-                    <button 
-                        onClick={handleClearChatSubmit}
-                        className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                    >
-                        <Trash2 size={16} />
-                        Sohbet Geçmişini Sil
-                    </button>
+                <div className="bg-red-50 p-5 rounded-xl border border-red-200 space-y-4">
+                    <div>
+                        <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2">
+                            <Trash size={18} className="text-red-600" />
+                            Sohbet Temizliği
+                        </h3>
+                        <p className="text-xs text-red-700 mb-3">
+                            Sohbet geçmişini manuel olarak temizleyin.
+                        </p>
+                        <button 
+                            onClick={handleClearChatSubmit}
+                            className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            <Trash2 size={16} />
+                            Tümünü Sil
+                        </button>
+                    </div>
+
+                    {onSaveChatSettings && (
+                        <div className="pt-4 border-t border-red-200">
+                             <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2">
+                                <Timer size={18} className="text-red-600" />
+                                Otomatik Silme
+                            </h3>
+                            <p className="text-xs text-red-700 mb-3">
+                                Mesajları belirli bir süreden sonra otomatik sil. (0 = Devre Dışı)
+                            </p>
+                            <div className="flex gap-2 mb-3">
+                                <div className="flex-1">
+                                    <label className="text-[10px] text-red-600 font-bold block mb-1">Saat</label>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        value={retentionHours}
+                                        onChange={(e) => setRetentionHours(parseInt(e.target.value) || 0)}
+                                        className="w-full p-2 text-sm border border-red-200 rounded-lg text-center"
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-[10px] text-red-600 font-bold block mb-1">Dakika</label>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        max="59"
+                                        value={retentionMinutes}
+                                        onChange={(e) => setRetentionMinutes(parseInt(e.target.value) || 0)}
+                                        className="w-full p-2 text-sm border border-red-200 rounded-lg text-center"
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-[10px] text-red-600 font-bold block mb-1">Saniye</label>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        max="59"
+                                        value={retentionSeconds}
+                                        onChange={(e) => setRetentionSeconds(parseInt(e.target.value) || 0)}
+                                        className="w-full p-2 text-sm border border-red-200 rounded-lg text-center"
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                onClick={handleSaveRetention}
+                                className="w-full py-2 bg-red-100 text-red-700 rounded-lg text-sm font-bold hover:bg-red-200 transition-colors flex items-center justify-center gap-2 border border-red-200"
+                            >
+                                <Save size={16} />
+                                Ayarları Kaydet
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
           </div>

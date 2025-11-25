@@ -270,6 +270,20 @@ export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
   });
 };
 
+export const subscribeToChatSettings = (onUpdate: (settings: any) => void) => {
+  if (!db) return () => {};
+  return onSnapshot(doc(db, "dockflow", "chat_settings"), (doc: any) => {
+    if (doc.exists()) {
+      onUpdate(doc.data());
+    }
+  });
+};
+
+export const saveChatSettings = async (settings: any) => {
+  if (!db) return;
+  await setDoc(doc(db, "dockflow", "chat_settings"), cleanData(settings));
+};
+
 export const sendChatMessage = async (message: any) => {
   if (!db) return;
   
@@ -320,6 +334,45 @@ export const clearAllChatMessages = async () => {
         return 0;
     }
 }
+
+export const deleteOldChatMessages = async (retentionMs: number) => {
+  if (!db) return 0;
+  
+  const cutoffTime = new Date(Date.now() - retentionMs).toISOString();
+  // Using simple string comparison for ISO dates
+  const q = query(collection(db, "chat_messages"), where("timestamp", "<=", cutoffTime));
+  
+  try {
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    const BATCH_SIZE = 500;
+    const chunks = [];
+    
+    for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
+        chunks.push(snapshot.docs.slice(i, i + BATCH_SIZE));
+    }
+
+    let deletedCount = 0;
+    for (const chunk of chunks) {
+        const batch = writeBatch(db);
+        chunk.forEach((doc: any) => {
+            batch.delete(doc.ref);
+            deletedCount++;
+        });
+        await batch.commit();
+    }
+    
+    if (deletedCount > 0) {
+        console.log(`${deletedCount} old messages deleted automatically.`);
+    }
+
+    return deletedCount;
+  } catch (e) {
+    console.error("Auto cleanup error", e);
+    return 0;
+  }
+};
 
 export const addSystemLog = async (log: any) => {
    if (!db) return;

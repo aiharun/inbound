@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageSquare, Trash2 } from 'lucide-react';
+import { X, Send, MessageSquare, Trash2, Clock } from 'lucide-react';
 import { ChatMessage, User as UserType } from '../types';
 
 interface ChatModalProps {
@@ -9,6 +9,7 @@ interface ChatModalProps {
   messages: ChatMessage[];
   currentUser: UserType;
   onSendMessage: (content: string) => void;
+  retentionSeconds?: number;
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({
@@ -16,7 +17,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onClose,
   messages,
   currentUser,
-  onSendMessage
+  onSendMessage,
+  retentionSeconds = 0
 }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -47,9 +49,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       .toUpperCase();
   };
 
+  const getRetentionText = () => {
+      if (!retentionSeconds) return null;
+      if (retentionSeconds < 60) return `her ${retentionSeconds} saniyede`;
+      if (retentionSeconds < 3600) return `her ${Math.floor(retentionSeconds/60)} dakikada`;
+      return `her ${Math.floor(retentionSeconds/3600)} saatte`;
+  };
+  const retentionText = getRetentionText();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm sm:items-end sm:justify-end sm:p-6">
-      <div className="bg-white w-full h-full sm:h-[600px] sm:w-[400px] sm:rounded-2xl shadow-2xl flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-200">
+      <div className="bg-white w-full h-full sm:h-[600px] sm:w-[400px] sm:rounded-2xl shadow-2xl flex flex-col animate-in fade-in slide-in-from-bottom-10 duration-200 overflow-hidden">
         {/* Header */}
         <div className="bg-orange-600 p-4 flex items-center justify-between sm:rounded-t-2xl shadow-md z-10">
           <div className="flex items-center gap-3">
@@ -68,6 +78,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <X size={20} />
           </button>
         </div>
+        
+        {/* Retention Banner */}
+        {retentionText && (
+            <div className="bg-yellow-50 px-4 py-2 text-[10px] text-yellow-700 font-bold border-b border-yellow-100 flex items-center justify-center gap-1">
+                <Clock size={10} />
+                Mesajlar {retentionText} bir otomatik silinir.
+            </div>
+        )}
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-slate-100 space-y-6 custom-scrollbar">
