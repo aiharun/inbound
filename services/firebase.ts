@@ -15,7 +15,8 @@ import {
   writeBatch,
   getDocs,
   deleteDoc,
-  getDoc
+  getDoc,
+  where
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -270,8 +271,60 @@ export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
 
 export const sendChatMessage = async (message: any) => {
   if (!db) return;
-  await addDoc(collection(db, "chat_messages"), cleanData(message));
+  
+  // Custom ID strategy: Content + Timestamp suffix to avoid collisions but keep it content-based
+  // Sanitizing content to be a valid ID key
+  const sanitizedContent = message.content.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
+  const customId = `${sanitizedContent}_${Date.now()}`;
+  
+  await setDoc(doc(db, "chat_messages", customId), cleanData(message));
 };
+
+// -- CHAT RETENTION & CLEANUP --
+
+export const subscribeToChatSettings = (onSettings: (settings: any) => void) => {
+  if (!db) return () => {};
+  const ref = doc(db, "dockflow", "chat_config");
+  return onSnapshot(ref, (snap: any) => {
+      if(snap.exists()) {
+          onSettings(snap.data());
+      }
+  });
+}
+
+export const saveChatSettings = async (settings: any) => {
+    if (!db) return;
+    await setDoc(doc(db, "dockflow", "chat_config"), cleanData(settings));
+}
+
+export const deleteOldChatMessages = async (retentionSeconds: number) => {
+    if (!db) return 0;
+    
+    const cutoffDate = new Date(Date.now() - retentionSeconds * 1000).toISOString();
+    
+    // Query messages older than cutoff
+    // Note: This requires a composite index on timestamp if we sort, but for deletion we can just where()
+    const q = query(collection(db, "chat_messages"), where("timestamp", "<", cutoffDate));
+    
+    try {
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        let count = 0;
+        
+        snapshot.docs.forEach((doc: any) => {
+            batch.delete(doc.ref);
+            count++;
+        });
+
+        if (count > 0) {
+            await batch.commit();
+        }
+        return count;
+    } catch (e) {
+        console.error("Cleanup error", e);
+        return 0;
+    }
+}
 
 export const addSystemLog = async (log: any) => {
    if (!db) return;

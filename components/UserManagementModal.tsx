@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, Trash2, Shield, User, Clock, Monitor, MessageSquare, Send, ArrowLeft, Timer, Save } from 'lucide-react';
 import { User as UserType, ActiveSession } from '../types';
 
 interface UserManagementModalProps {
@@ -11,6 +11,8 @@ interface UserManagementModalProps {
   onDeleteUser: (username: string) => void;
   currentUser: UserType;
   onSendMessage: (targetUsername: string, messageContent: string) => void;
+  onSaveChatSettings?: (seconds: number) => void;
+  currentRetentionSeconds?: number;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -21,7 +23,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   onAddUser,
   onDeleteUser,
   currentUser,
-  onSendMessage
+  onSendMessage,
+  onSaveChatSettings,
+  currentRetentionSeconds = 0
 }) => {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -32,6 +36,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   // Messaging State
   const [messagingUser, setMessagingUser] = useState<UserType | null>(null);
   const [messageBody, setMessageBody] = useState('');
+
+  // Chat Settings State
+  const [hours, setHours] = useState(0);
+  const [minutes, setMinutes] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) {
+        // Convert total seconds to H:M:S
+        const h = Math.floor(currentRetentionSeconds / 3600);
+        const m = Math.floor((currentRetentionSeconds % 3600) / 60);
+        const s = currentRetentionSeconds % 60;
+        setHours(h);
+        setMinutes(m);
+        setSeconds(s);
+    }
+  }, [isOpen, currentRetentionSeconds]);
 
   if (!isOpen) return null;
 
@@ -71,24 +92,29 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
   };
 
+  const handleSaveChatSettings = () => {
+      if (onSaveChatSettings) {
+          const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
+          onSaveChatSettings(totalSeconds);
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl p-6 m-4 animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-6 m-4 animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Kullanıcı Yönetimi</h2>
-            <p className="text-sm text-slate-500">Personel ekle, sil ve aktif oturumları izle</p>
+            <h2 className="text-xl font-bold text-slate-800">Kullanıcı & Sistem Yönetimi</h2>
+            <p className="text-sm text-slate-500">Personel, oturumlar ve sistem ayarları</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition">
             <X size={20} />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 overflow-y-auto custom-scrollbar pr-2">
-          {/* LEFT COLUMN: User List & Add User / Message User */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pr-2 pb-4">
+          {/* LEFT COLUMN: User Add / Message */}
           <div className="space-y-6">
-            
-            {/* Toggle between Add User and Send Message Form */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
               {messagingUser ? (
                  <div>
@@ -178,8 +204,63 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               )}
             </div>
 
-            {/* Registered Users List */}
-            <div>
+            {/* Chat Settings for Admin */}
+            {onSaveChatSettings && (
+                <div className="bg-orange-50 p-5 rounded-xl border border-orange-200">
+                    <h3 className="font-bold text-orange-800 mb-3 flex items-center gap-2">
+                        <Timer size={18} className="text-orange-600" />
+                        Sohbet Geçmişi Temizleme
+                    </h3>
+                    <p className="text-xs text-orange-700 mb-4">
+                        Belirtilen süreden eski mesajlar otomatik olarak silinir. (0 = Devre Dışı)
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div>
+                            <label className="text-[10px] text-orange-600 font-bold block mb-1">SAAT</label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                value={hours}
+                                onChange={(e) => setHours(parseInt(e.target.value) || 0)}
+                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-orange-600 font-bold block mb-1">DAKİKA</label>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                max="59"
+                                value={minutes}
+                                onChange={(e) => setMinutes(parseInt(e.target.value) || 0)}
+                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-orange-600 font-bold block mb-1">SANİYE</label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                max="59"
+                                value={seconds}
+                                onChange={(e) => setSeconds(parseInt(e.target.value) || 0)}
+                                className="w-full p-2 text-center rounded-lg border border-orange-300 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleSaveChatSettings}
+                        className="w-full py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <Save size={14} />
+                        Süreyi Kaydet
+                    </button>
+                </div>
+            )}
+          </div>
+
+          {/* CENTER COLUMN: User List */}
+          <div className="space-y-2">
               <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
                 <User size={18} className="text-slate-500" />
                 Kayıtlı Kullanıcılar
@@ -217,7 +298,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   </div>
                 ))}
               </div>
-            </div>
           </div>
 
           {/* RIGHT COLUMN: Active Sessions */}

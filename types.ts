@@ -68,11 +68,18 @@ export interface ChatMessage {
   senderName: string;
   content: string;
   timestamp: string;
+  isSystemMessage?: boolean; // New field to identify cleanup notifications
+}
+
+export interface ChatSettings {
+  retentionSeconds: number; // 0 means disabled
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export interface SystemLog {
   id: string;
-  actionType: 'LOGIN' | 'LOGOUT' | 'VEHICLE_ADD' | 'RAMP_ASSIGN' | 'RAMP_CLEAR' | 'CANCEL' | 'UPDATE' | 'RESET' | 'USER_MGMT';
+  actionType: 'LOGIN' | 'LOGOUT' | 'VEHICLE_ADD' | 'RAMP_ASSIGN' | 'RAMP_CLEAR' | 'CANCEL' | 'UPDATE' | 'RESET' | 'USER_MGMT' | 'CHAT_CLEANUP';
   description: string;
   performedBy: string; // Username
   performedByName: string; // Real Name
