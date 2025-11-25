@@ -34,19 +34,17 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // REFERANSLAR
-const DATA_DOC_REF = doc(db, "dockflow", "live_data"); // Sadece Rampalar ve Araçlar burada kalacak
+const DATA_DOC_REF = doc(db, "dockflow", "live_data");
 
-// --- SİHİRLİ TEMİZLEYİCİ (Undefined Hatasını Önler) ---
+// --- TEMİZLEYİCİ ---
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   return JSON.parse(JSON.stringify(data));
 };
 
 // ==========================================
-// 1. DATA SUBSCRIBE (Veri Dinleme - Birleştirme)
+// 1. DATA SUBSCRIBE (Veri Dinleme)
 // ==========================================
-// React uygulaması tek bir yerden veri beklediği için
-// Veritabanındaki parçalanmış verileri (Users, Plates, Main) burada birleştiriyoruz.
 
 let internalState: any = {
   users: [],
@@ -55,25 +53,23 @@ let internalState: any = {
 };
 
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
-  console.log("🔥 Firebase: Ayrıştırılmış Koleksiyon Modu Aktif...");
+  console.log("🔥 Firebase: Senkronizasyon Modu Aktif...");
 
   const emit = () => {
-    // Tüm parçaları birleştirip React'e gönder
     onDataUpdate({ ...internalState });
   };
 
-  // 1. PARÇA: Operasyonel Veriler (Rampalar, Seferler vs.)
+  // 1. Operasyonel Veriler
   const unsubMain = onSnapshot(DATA_DOC_REF, (snap) => {
     if (snap.exists()) {
       const data = snap.data();
-      // users ve drivers buradan gelmeyecek artık, onları eziyoruz
       const { users, drivers, availablePlates, ...operationalData } = data;
       internalState = { ...internalState, ...operationalData };
       emit();
     }
   });
 
-  // 2. PARÇA: Kullanıcılar (Users Koleksiyonu)
+  // 2. Kullanıcılar
   const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
     const usersList: any[] = [];
     snap.forEach(doc => usersList.push(doc.data()));
@@ -81,14 +77,14 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
     emit();
   });
 
-  // 3. PARÇA: Plakalar ve Sürücüler (Plates Koleksiyonu)
+  // 3. Plakalar ve Sürücüler
   const unsubPlates = onSnapshot(collection(db, "plates"), (snap) => {
     const driversObj: any = {};
     const platesList: string[] = [];
 
     snap.forEach(doc => {
       const plate = doc.id;
-      driversObj[plate] = doc.data(); // İsim, telefon vs.
+      driversObj[plate] = doc.data();
       platesList.push(plate);
     });
 
@@ -97,7 +93,6 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
     emit();
   });
 
-  // Dinlemeyi durdurmak istendiğinde hepsini kapat
   return () => {
     unsubMain();
     unsubUsers();
@@ -106,9 +101,8 @@ export const subscribeToData = (onDataUpdate: (data: any) => void) => {
 };
 
 // ==========================================
-// 2. DATA UPDATE (Veri Güncelleme - Dağıtma)
+// 2. DATA UPDATE (Veri Güncelleme ve SİLME)
 // ==========================================
-// React tek parça gönderir, biz burada onu ilgili kutulara dağıtırız.
 
 export const updateData = async (updates: any) => {
   try {
@@ -116,9 +110,23 @@ export const updateData = async (updates: any) => {
     let hasBatchOps = false;
     let mainDocUpdates: any = {};
 
-    // A. KULLANICI GÜNCELLEMESİ VARSA -> 'users' koleksiyonuna
+    // A. KULLANICI GÜNCELLEMESİ (Silme Mantığı Eklendi)
     if (updates.users) {
       const usersRef = collection(db, "users");
+      
+      // 1. Önce mevcut tüm kullanıcıları çek (Neyi sileceğimizi bilmek için)
+      const currentUsersSnap = await getDocs(usersRef);
+      const newUsernameList = updates.users.map((u: any) => u.username);
+
+      // 2. Listede olmayanları veritabanından SİL
+      currentUsersSnap.docs.forEach((doc) => {
+        if (!newUsernameList.includes(doc.id)) {
+          batch.delete(doc.ref); // Silme işlemi
+          hasBatchOps = true;
+        }
+      });
+
+      // 3. Yeni/Mevcut kullanıcıları GÜNCELLE
       updates.users.forEach((user: any) => {
         if (user.username) {
           const ref = doc(usersRef, user.username);
@@ -126,23 +134,38 @@ export const updateData = async (updates: any) => {
           hasBatchOps = true;
         }
       });
-      // Main doc'a yazılmasın diye siliyoruz
+      
       delete updates.users;
     }
 
-    // B. SÜRÜCÜ GÜNCELLEMESİ VARSA -> 'plates' koleksiyonuna
+    // B. SÜRÜCÜ GÜNCELLEMESİ (Silme Mantığı Eklendi)
     if (updates.drivers) {
       const platesRef = collection(db, "plates");
+      
+      // 1. Önce mevcut tüm plakaları çek
+      const currentPlatesSnap = await getDocs(platesRef);
+      const newPlateList = Object.keys(updates.drivers);
+
+      // 2. Listede olmayanları SİL
+      currentPlatesSnap.docs.forEach((doc) => {
+        if (!newPlateList.includes(doc.id)) {
+          batch.delete(doc.ref); // Silme işlemi
+          hasBatchOps = true;
+        }
+      });
+
+      // 3. Geri kalanları GÜNCELLE
       Object.entries(updates.drivers).forEach(([plate, info]: [string, any]) => {
         const ref = doc(platesRef, plate);
         batch.set(ref, cleanData(info));
         hasBatchOps = true;
       });
+
       delete updates.drivers;
       if (updates.availablePlates) delete updates.availablePlates;
     }
 
-    // C. DİĞER HER ŞEY -> 'dockflow/live_data' dökümanına
+    // C. DİĞER VERİLER
     if (Object.keys(updates).length > 0) {
       mainDocUpdates = cleanData(updates);
     }
@@ -154,7 +177,7 @@ export const updateData = async (updates: any) => {
     }
 
   } catch (error) {
-    console.error("Veri dağıtım hatası:", error);
+    console.error("Veri güncelleme/silme hatası:", error);
   }
 };
 
@@ -164,21 +187,26 @@ export const updateData = async (updates: any) => {
 
 export const resetCloudData = async (fullData: any) => {
   try {
-    // Önce operasyonel veriyi sıfırla
+    // Operasyonel veriyi sıfırla
     const { users, drivers, availablePlates, ...operational } = fullData;
     await setDoc(DATA_DOC_REF, cleanData(operational));
 
-    // Şimdi koleksiyonları güncelle (Batch ile)
     const batch = writeBatch(db);
 
-    // Users
+    // Eski kullanıcıları temizlemek için önce hepsini silmek daha güvenli (Reset için)
+    const usersSnap = await getDocs(collection(db, "users"));
+    usersSnap.forEach(d => batch.delete(d.ref));
+
+    const platesSnap = await getDocs(collection(db, "plates"));
+    platesSnap.forEach(d => batch.delete(d.ref));
+
+    // Yenileri ekle
     if (users) {
       users.forEach((u: any) => {
         batch.set(doc(db, "users", u.username), cleanData(u));
       });
     }
 
-    // Drivers
     if (drivers) {
       Object.entries(drivers).forEach(([plate, info]: [string, any]) => {
         batch.set(doc(db, "plates", plate), cleanData(info));
@@ -186,7 +214,7 @@ export const resetCloudData = async (fullData: any) => {
     }
     
     await batch.commit();
-    console.log("Veritabanı organize şekilde sıfırlandı.");
+    console.log("Veritabanı tam resetlendi.");
 
   } catch (error) {
     console.error("Reset hatası:", error);
@@ -213,44 +241,28 @@ export const addSystemLog = async (log: any) => {
    await addDoc(collection(db, "system_logs"), cleanData(log));
 }
 
-// ARŞİV FONKSİYONLARI (Güncel - Tarih ID'li)
+// ARŞİV
 export const saveDailyArchive = async (archiveData: any) => {
     if (!db) return;
-    
     try {
-        // 1. Bugünü YYYY-AA-GG formatında al (Döküman ID'si olacak)
         const dateId = new Date().toISOString().split('T')[0];
-
         const archiveRef = doc(db, "daily_archives", dateId);
         
-        // 2. Veriyi hazırla
         const cleanArchive = cleanData({
             ...archiveData,
             id: dateId, 
             archiveDate: dateId 
         });
         
-        // 3. KAYDET (setDoc ile özel ID kullanarak)
         await setDoc(archiveRef, cleanArchive);
-        console.log(`Arşiv kaydedildi: ${dateId}`);
         
-        // 4. 7 Günden eski kayıtları temizle
-        const archivesCollection = collection(db, "daily_archives");
-        const q = query(archivesCollection, orderBy("date", "asc"));
+        const q = query(collection(db, "daily_archives"), orderBy("date", "asc"));
         const snapshot = await getDocs(q);
-        
         if (snapshot.size > 7) {
-            const excess = snapshot.size - 7;
-            const docsToDelete = snapshot.docs.slice(0, excess);
-            
             const batch = writeBatch(db);
-            docsToDelete.forEach(doc => {
-                batch.delete(doc.ref);
-            });
+            snapshot.docs.slice(0, snapshot.size - 7).forEach(d => batch.delete(d.ref));
             await batch.commit();
-            console.log(`${excess} eski arşiv kaydı silindi.`);
         }
-        
     } catch (error) {
         console.error("Arşivleme hatası:", error);
     }
