@@ -1,4 +1,3 @@
-
 // src/services/firebase.ts
 
 import { initializeApp } from "firebase/app";
@@ -323,7 +322,7 @@ export const clearAllChatMessages = async () => {
         await sendChatMessage({
             senderUsername: 'SYSTEM',
             senderName: 'Sistem',
-            content: 'Sohbet geçmişi yönetici tarafından temizlendi.',
+            content: 'Sohbet geçmişi otomatik temizlendi.',
             timestamp: new Date().toISOString(),
             isSystemMessage: true
         });
@@ -339,35 +338,26 @@ export const deleteOldChatMessages = async (retentionMs: number) => {
   if (!db) return 0;
   
   const cutoffTime = new Date(Date.now() - retentionMs).toISOString();
-  // Using simple string comparison for ISO dates
-  const q = query(collection(db, "chat_messages"), where("timestamp", "<=", cutoffTime));
+  
+  // Check if ANY message is older than the cutoff time.
+  // We don't need to fetch all of them, just knowing one exists is enough to trigger the wipe.
+  const q = query(
+      collection(db, "chat_messages"), 
+      where("timestamp", "<=", cutoffTime),
+      limit(1)
+  );
   
   try {
     const snapshot = await getDocs(q);
-    if (snapshot.empty) return 0;
-
-    const BATCH_SIZE = 500;
-    const chunks = [];
     
-    for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
-        chunks.push(snapshot.docs.slice(i, i + BATCH_SIZE));
+    // If we found at least one message older than the limit
+    if (!snapshot.empty) {
+        console.log("Retention limit reached. Wiping all chat history.");
+        // Call the full clear function
+        return await clearAllChatMessages();
     }
 
-    let deletedCount = 0;
-    for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        chunk.forEach((doc: any) => {
-            batch.delete(doc.ref);
-            deletedCount++;
-        });
-        await batch.commit();
-    }
-    
-    if (deletedCount > 0) {
-        console.log(`${deletedCount} old messages deleted automatically.`);
-    }
-
-    return deletedCount;
+    return 0;
   } catch (e) {
     console.error("Auto cleanup error", e);
     return 0;
