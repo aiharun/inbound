@@ -18,7 +18,7 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// SENİN API ANAHTARLARIN
+// API ANAHTARLARI
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyBmOl3FTL5Jr-QnERQCmkTgl6e3HSfraH8",
@@ -36,7 +36,7 @@ const db = getFirestore(app);
 // REFERANSLAR
 const DATA_DOC_REF = doc(db, "dockflow", "live_data"); // Sadece Rampalar ve Araçlar burada kalacak
 
-// --- SİHİRLİ TEMİZLEYİCİ ---
+// --- SİHİRLİ TEMİZLEYİCİ (Undefined Hatasını Önler) ---
 const cleanData = (data: any) => {
   if (data === undefined || data === null) return null;
   return JSON.parse(JSON.stringify(data));
@@ -45,10 +45,9 @@ const cleanData = (data: any) => {
 // ==========================================
 // 1. DATA SUBSCRIBE (Veri Dinleme - Birleştirme)
 // ==========================================
-// Burası çok önemli: 3 farklı yerden veriyi alıp React'e tek paket yapıyor.
-// Böylece React kodunu değiştirmene gerek kalmıyor.
+// React uygulaması tek bir yerden veri beklediği için
+// Veritabanındaki parçalanmış verileri (Users, Plates, Main) burada birleştiriyoruz.
 
-// Geçici hafıza
 let internalState: any = {
   users: [],
   drivers: {},
@@ -56,7 +55,7 @@ let internalState: any = {
 };
 
 export const subscribeToData = (onDataUpdate: (data: any) => void) => {
-  console.log("🔥 Firebase: Ayrıştırılmış Koleksiyon Modu Başlatılıyor...");
+  console.log("🔥 Firebase: Ayrıştırılmış Koleksiyon Modu Aktif...");
 
   const emit = () => {
     // Tüm parçaları birleştirip React'e gönder
@@ -120,8 +119,6 @@ export const updateData = async (updates: any) => {
     // A. KULLANICI GÜNCELLEMESİ VARSA -> 'users' koleksiyonuna
     if (updates.users) {
       const usersRef = collection(db, "users");
-      // Not: Tam senkronizasyon için önce eskileri silmek gerekebilir ama
-      // performans için şimdilik sadece üzerine yazıyoruz (overwrite).
       updates.users.forEach((user: any) => {
         if (user.username) {
           const ref = doc(usersRef, user.username);
@@ -142,7 +139,6 @@ export const updateData = async (updates: any) => {
         hasBatchOps = true;
       });
       delete updates.drivers;
-      // availablePlates otomatik oluştuğu için main doc'tan siliyoruz
       if (updates.availablePlates) delete updates.availablePlates;
     }
 
@@ -165,7 +161,6 @@ export const updateData = async (updates: any) => {
 // ==========================================
 // 3. RESET DATA (Sıfırlama)
 // ==========================================
-// Günü bitir dediğinde tüm koleksiyonları temizler.
 
 export const resetCloudData = async (fullData: any) => {
   try {
@@ -199,7 +194,7 @@ export const resetCloudData = async (fullData: any) => {
 };
 
 // ==========================================
-// 4. CHAT, LOG ve ARŞİV (Ayrı Koleksiyonlar)
+// 4. CHAT, LOG ve ARŞİV
 // ==========================================
 
 export const subscribeToChat = (onMessages: (msgs: any[]) => void) => {
@@ -218,35 +213,30 @@ export const addSystemLog = async (log: any) => {
    await addDoc(collection(db, "system_logs"), cleanData(log));
 }
 
-// src/services/firebase.ts içindeki "saveDailyArchive" fonksiyonunu bununla değiştir:
-
+// ARŞİV FONKSİYONLARI (Güncel - Tarih ID'li)
 export const saveDailyArchive = async (archiveData: any) => {
     if (!db) return;
     
     try {
-        // 1. Bugünü YYYY-AA-GG formatında al (Örn: "2025-11-26")
-        // Bu bizim döküman ID'miz olacak.
+        // 1. Bugünü YYYY-AA-GG formatında al (Döküman ID'si olacak)
         const dateId = new Date().toISOString().split('T')[0];
 
-        // 2. Referansı bu tarih ID'si ile oluştur
         const archiveRef = doc(db, "daily_archives", dateId);
         
-        // 3. Veriyi Temizle ve Hazırla
+        // 2. Veriyi hazırla
         const cleanArchive = cleanData({
             ...archiveData,
-            id: dateId, // ID bilgisini verinin içine de koyuyoruz
-            archiveDate: dateId // Okuması kolay olsun diye ek alan
+            id: dateId, 
+            archiveDate: dateId 
         });
         
-        // 4. KAYDET (addDoc yerine setDoc kullanıyoruz)
-        // Eğer o günün arşivi zaten varsa üzerine yazar (Günceller), yoksa oluşturur.
+        // 3. KAYDET (setDoc ile özel ID kullanarak)
         await setDoc(archiveRef, cleanArchive);
         console.log(`Arşiv kaydedildi: ${dateId}`);
         
-        // 5. 7 Günden eski kayıtları temizle
-        // ID'ler tarih olduğu için sıralama çok daha kolaydır
+        // 4. 7 Günden eski kayıtları temizle
         const archivesCollection = collection(db, "daily_archives");
-        const q = query(archivesCollection, orderBy("date", "asc")); // date field'ına göre sırala
+        const q = query(archivesCollection, orderBy("date", "asc"));
         const snapshot = await getDocs(q);
         
         if (snapshot.size > 7) {
@@ -265,3 +255,16 @@ export const saveDailyArchive = async (archiveData: any) => {
         console.error("Arşivleme hatası:", error);
     }
 };
+
+export const getDailyArchives = async () => {
+    const q = query(collection(db, "daily_archives"), orderBy("date", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+export const getArchiveById = async (id: string) => {
+    const docSnap = await getDoc(doc(db, "daily_archives", id));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+};
+
+export const isFirebaseConfigured = () => !!firebaseConfig.apiKey;
