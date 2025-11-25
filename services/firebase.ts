@@ -218,30 +218,50 @@ export const addSystemLog = async (log: any) => {
    await addDoc(collection(db, "system_logs"), cleanData(log));
 }
 
-// Arşiv
+// src/services/firebase.ts içindeki "saveDailyArchive" fonksiyonunu bununla değiştir:
+
 export const saveDailyArchive = async (archiveData: any) => {
-    const archivesRef = collection(db, "daily_archives");
-    await addDoc(archivesRef, cleanData(archiveData));
+    if (!db) return;
     
-    // 7 gün temizliği
-    const q = query(archivesRef, orderBy("date", "asc"));
-    const snapshot = await getDocs(q);
-    if (snapshot.size > 7) {
-        const batch = writeBatch(db);
-        snapshot.docs.slice(0, snapshot.size - 7).forEach(d => batch.delete(d.ref));
-        await batch.commit();
+    try {
+        // 1. Bugünü YYYY-AA-GG formatında al (Örn: "2025-11-26")
+        // Bu bizim döküman ID'miz olacak.
+        const dateId = new Date().toISOString().split('T')[0];
+
+        // 2. Referansı bu tarih ID'si ile oluştur
+        const archiveRef = doc(db, "daily_archives", dateId);
+        
+        // 3. Veriyi Temizle ve Hazırla
+        const cleanArchive = cleanData({
+            ...archiveData,
+            id: dateId, // ID bilgisini verinin içine de koyuyoruz
+            archiveDate: dateId // Okuması kolay olsun diye ek alan
+        });
+        
+        // 4. KAYDET (addDoc yerine setDoc kullanıyoruz)
+        // Eğer o günün arşivi zaten varsa üzerine yazar (Günceller), yoksa oluşturur.
+        await setDoc(archiveRef, cleanArchive);
+        console.log(`Arşiv kaydedildi: ${dateId}`);
+        
+        // 5. 7 Günden eski kayıtları temizle
+        // ID'ler tarih olduğu için sıralama çok daha kolaydır
+        const archivesCollection = collection(db, "daily_archives");
+        const q = query(archivesCollection, orderBy("date", "asc")); // date field'ına göre sırala
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.size > 7) {
+            const excess = snapshot.size - 7;
+            const docsToDelete = snapshot.docs.slice(0, excess);
+            
+            const batch = writeBatch(db);
+            docsToDelete.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            console.log(`${excess} eski arşiv kaydı silindi.`);
+        }
+        
+    } catch (error) {
+        console.error("Arşivleme hatası:", error);
     }
 };
-
-export const getDailyArchives = async () => {
-    const q = query(collection(db, "daily_archives"), orderBy("date", "desc"));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-};
-
-export const getArchiveById = async (id: string) => {
-    const docSnap = await getDoc(doc(db, "daily_archives", id));
-    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
-};
-
-export const isFirebaseConfigured = () => !!firebaseConfig.apiKey;
