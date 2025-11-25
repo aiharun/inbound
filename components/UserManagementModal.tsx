@@ -93,7 +93,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       if (onSaveChatSettings) {
           const totalSeconds = (retentionHours * 3600) + (retentionMinutes * 60) + retentionSeconds;
           onSaveChatSettings(totalSeconds);
-          alert("Sohbet geçmişi ayarları güncellendi.");
+          alert("Sohbet geçmişi ayarları güncellendi. Sohbet her " + totalSeconds + " saniyede bir otomatik temizlenecektir.");
       }
   };
 
@@ -229,7 +229,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 Otomatik Silme
                             </h3>
                             <p className="text-xs text-red-700 mb-3">
-                                Mesajları belirli bir süreden sonra otomatik sil. (0 = Devre Dışı)
+                                Sohbet her X saniyede bir otomatik olarak temizlenir. (0 = Devre Dışı)
                             </p>
                             <div className="flex gap-2 mb-3">
                                 <div className="flex-1">

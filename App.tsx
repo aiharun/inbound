@@ -24,7 +24,7 @@ import { ArchiveListModal } from './components/ArchiveListModal';
 import { LayoutDashboard, Repeat, Phone, LogIn, LogOut, StickyNote, RotateCcw, CheckCircle2, Cloud, CloudOff, Users, MessageSquare, FileClock, Archive, Eye } from 'lucide-react';
 import { DRIVER_REGISTRY, DriverInfo } from './data/drivers';
 import { INITIAL_USERS } from './data/users';
-import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById, clearAllChatMessages, subscribeToChatSettings, saveChatSettings, deleteOldChatMessages } from './services/firebase';
+import { subscribeToData, updateData, resetCloudData, isFirebaseConfigured, subscribeToChat, sendChatMessage, addSystemLog, saveDailyArchive, getArchiveById, clearAllChatMessages, subscribeToChatSettings, saveChatSettings, checkPeriodicChatCleanup } from './services/firebase';
 
 // Initial State Generator
 const createInitialRamps = (): Ramp[] => Array.from({ length: 5 }, (_, i) => ({
@@ -241,11 +241,11 @@ const App: React.FC = () => {
 
   // AUTO-CLEANUP LOGIC (ADMIN ONLY)
   useEffect(() => {
-      if (!isLoggedIn || !isAdmin || !chatSettings || !chatSettings.retentionSeconds) return;
+      if (!isLoggedIn || !isAdmin || !chatSettings) return;
 
       const checkCleanup = async () => {
-          const retentionMs = chatSettings.retentionSeconds * 1000;
-          await deleteOldChatMessages(retentionMs);
+          // Pass current settings to check periodic interval
+          await checkPeriodicChatCleanup(chatSettings);
       };
 
       // Check every 5 seconds to ensure timely deletion
@@ -555,6 +555,7 @@ const App: React.FC = () => {
       
       const newSettings: ChatSettings = {
           retentionSeconds: seconds,
+          lastClearTime: new Date().toISOString(), // Initialize cycle immediately
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser?.username || 'admin'
       };
@@ -1603,4 +1604,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-  

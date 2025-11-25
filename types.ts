@@ -72,7 +72,8 @@ export interface ChatMessage {
 }
 
 export interface ChatSettings {
-  retentionSeconds: number; // Total seconds to keep messages. 0 means disabled.
+  retentionSeconds: number; // Total seconds for interval. 0 means disabled.
+  lastClearTime?: string; // ISO String of the last wipe
   updatedAt: string;
   updatedBy: string;
 }

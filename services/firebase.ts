@@ -1,3 +1,4 @@
+
 // src/services/firebase.ts
 
 import { initializeApp } from "firebase/app";
@@ -18,6 +19,7 @@ import {
   getDoc,
   where
 } from "firebase/firestore";
+import { ChatSettings } from "../types";
 
 // ------------------------------------------------------------------
 // API ANAHTARLARI
@@ -334,34 +336,23 @@ export const clearAllChatMessages = async () => {
     }
 }
 
-export const deleteOldChatMessages = async (retentionMs: number) => {
+export const checkPeriodicChatCleanup = async (settings: ChatSettings) => {
   if (!db) return 0;
+  if (!settings.retentionSeconds || settings.retentionSeconds <= 0) return 0;
   
-  const cutoffTime = new Date(Date.now() - retentionMs).toISOString();
+  const lastClear = settings.lastClearTime ? new Date(settings.lastClearTime).getTime() : 0;
+  const now = Date.now();
+  const interval = settings.retentionSeconds * 1000;
   
-  // Check if ANY message is older than the cutoff time.
-  // We don't need to fetch all of them, just knowing one exists is enough to trigger the wipe.
-  const q = query(
-      collection(db, "chat_messages"), 
-      where("timestamp", "<=", cutoffTime),
-      limit(1)
-  );
-  
-  try {
-    const snapshot = await getDocs(q);
-    
-    // If we found at least one message older than the limit
-    if (!snapshot.empty) {
-        console.log("Retention limit reached. Wiping all chat history.");
-        // Call the full clear function
-        return await clearAllChatMessages();
-    }
-
-    return 0;
-  } catch (e) {
-    console.error("Auto cleanup error", e);
-    return 0;
+  // If never cleared or time elapsed
+  if (!lastClear || (now - lastClear) >= interval) {
+      console.log("Periodic cleanup trigger.");
+      await clearAllChatMessages();
+      // Update lastClearTime
+      await saveChatSettings({ ...settings, lastClearTime: new Date().toISOString() });
+      return 1;
   }
+  return 0;
 };
 
 export const addSystemLog = async (log: any) => {
